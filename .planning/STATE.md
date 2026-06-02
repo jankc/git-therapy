@@ -1,11 +1,16 @@
 ---
-gsd_state_version: '1.0'
-status: ready_to_execute
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Completed GT-01-opentui-shell plan 01-01 - three-pane shell with typed focus
+last_updated: "2026-06-02T12:45:28.163Z"
+last_activity: 2026-06-02 -- Phase 01 execution started
 progress:
   total_phases: 9
   completed_phases: 0
-  total_plans: 19
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -16,20 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-02)
 
 **Core value:** Every absurd inference must be grounded in specific git evidence while the tool plays the analysis completely straight.
-**Current focus:** Phase 1: OpenTUI Shell
+**Current focus:** Phase 01 — opentui-shell
 
 ## Current Position
 
-Phase: 1 of 9 (OpenTUI Shell)
-Plan: 0 of 2 in current phase
+Phase: 01 (opentui-shell) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-06-02 - Planned Phase 1 with 2 executable plans
+Last activity: 2026-06-02 -- Phase 01 execution started
 
 Progress: [..........] 0%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: n/a
 - Total execution time: 0.0 hours
@@ -41,8 +47,11 @@ Progress: [..........] 0%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: none
 - Trend: n/a
+
+| Phase 01-opentui-shell P01 | 166 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -55,6 +64,9 @@ Recent decisions affecting current work:
 - Initialization: Use fine-grained sequential phases matching the specified build order.
 - Initialization: Treat phase specs as locked WHAT/WHY inputs before discuss/plan.
 - Scope update: v1 supports one selected author at a time; moving to a second author re-runs analysis instead of comparing several authors simultaneously.
+- [Phase ?]: PaneId is derived from PANE_IDS readonly tuple using typeof indexing - avoids enum, satisfies strict TypeScript
+- [Phase ?]: flexGrow 3/1/1 ratio approximates 60/20/20 pane width split without hard pixel values
+- [Phase ?]: PERSPECTIVE_HOTKEYS constant makes inert Phase 1 hotkey registration source-auditable
 
 ### Pending Todos
 
@@ -72,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-02T12:01:19.264Z
-Stopped at: Phase 1 UI-SPEC approved
-Resume file: .planning/phases/GT-01-opentui-shell/01-UI-SPEC.md
+Last session: 2026-06-02T12:45:28.160Z
+Stopped at: Completed GT-01-opentui-shell plan 01-01 - three-pane shell with typed focus
+Resume file: None

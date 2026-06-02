@@ -13,11 +13,11 @@
 
 ### Terminal UI
 
-- [ ] **TUI-01**: User sees three always-visible columns: source/blame, authors, and analysis.
+- [x] **TUI-01**: User sees three always-visible columns: source/blame, authors, and analysis.
 - [ ] **TUI-02**: Source pane displays each scoped line with short SHA, author, date, and source text.
 - [ ] **TUI-03**: Authors pane displays each author touching the scope with line-count share.
 - [ ] **TUI-04**: Analysis pane displays an analyzing state, selected perspective name, result content, and hotkey footer.
-- [ ] **TUI-05**: User can cycle focus between panes with Tab.
+- [x] **TUI-05**: User can cycle focus between panes with Tab.
 - [ ] **TUI-06**: Lines belonging to the selected author are subtly highlighted.
 
 ### Author Selection
@@ -92,11 +92,11 @@
 | CLI-01 | Phase 2 | Pending |
 | CLI-02 | Phase 2 | Pending |
 | CLI-03 | Phase 1 | Pending |
-| TUI-01 | Phase 1 | Pending |
+| TUI-01 | Phase 1 | Complete |
 | TUI-02 | Phase 2 | Pending |
 | TUI-03 | Phase 3 | Pending |
 | TUI-04 | Phase 5 | Pending |
-| TUI-05 | Phase 1 | Pending |
+| TUI-05 | Phase 1 | Complete |
 | TUI-06 | Phase 7 | Pending |
 | SEL-01 | Phase 3 | Pending |
 | SEL-02 | Phase 3 | Pending |
@@ -125,6 +125,7 @@
 | DEMO-03 | Phase 9 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 34 total
 - Mapped to phases: 34
 - Unmapped: 0
