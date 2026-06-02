@@ -11,7 +11,7 @@ Build git-therapy as a sequence of demonstrable vertical slices: first the termi
 - Integer phases (1, 2, 3): Planned milestone work.
 - Decimal phases (2.1, 2.2): Urgent insertions marked INSERTED.
 
-- [ ] **Phase 1: OpenTUI Shell** - Three empty panes, focus handling, quit behavior, and no-op hotkeys.
+- [x] **Phase 1: OpenTUI Shell** - Three empty panes, focus handling, quit behavior, and no-op hotkeys.
 - [ ] **Phase 2: Git Blame Parser** - Parse a real file scope and render blame-prefixed source lines.
 - [ ] **Phase 3: Authors Pane** - Derive authors from blame data and support single-author selection.
 - [ ] **Phase 4: Evidence Collector** - Produce the full `AuthorEvidence` input shape.
@@ -46,7 +46,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02: Keyboard handling for Tab, q, and perspective hotkeys.
+- [x] 01-02: Keyboard handling for Tab, q, and perspective hotkeys.
 
 ### Phase 2: Git Blame Parser
 
@@ -216,7 +216,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. OpenTUI Shell | 1/2 | In Progress|  |
+| 1. OpenTUI Shell | 2/2 | Complete | 2026-06-02 |
 | 2. Git Blame Parser | 0/2 | Not started | - |
 | 3. Authors Pane | 0/2 | Not started | - |
 | 4. Evidence Collector | 0/2 | Not started | - |
