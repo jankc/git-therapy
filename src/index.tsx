@@ -15,7 +15,7 @@ const PANE_DEFS: PaneDef[] = [
   { id: "why", title: "Why", body: "No theory formed" },
 ];
 
-const PERSPECTIVE_HOTKEYS = ["1", "2", "3", "4"] as const;
+const PERSPECTIVE_HOTKEYS = new Set(["1", "2", "3", "4"]);
 
 const PANE_FLEX: Record<PaneId, number> = {
   what: 3,
@@ -28,10 +28,10 @@ function App() {
 
   useKeyboard((key) => {
     if (key.name === "tab") {
-      setFocusedPane((prev) => getNextPaneId(prev));
+      setFocusedPane((current) => getNextPaneId(current));
     } else if (key.name === "q") {
       process.exit(0);
-    } else if ((PERSPECTIVE_HOTKEYS as readonly string[]).includes(key.name)) {
+    } else if (PERSPECTIVE_HOTKEYS.has(key.name)) {
       // Inert: perspective hotkeys registered but not active in Phase 1
     }
   });
