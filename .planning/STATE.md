@@ -72,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-02 12:00
-Stopped at: GSD planning artifacts generated; source implementation not started.
-Resume file: None
+Last session: 2026-06-02T11:32:44.606Z
+Stopped at: Phase 1 context gathered
+Resume file: .planning/phases/GT-01-opentui-shell/01-CONTEXT.md
