@@ -1,6 +1,6 @@
 ---
 gsd_state_version: '1.0'
-status: planning
+status: ready_to_execute
 progress:
   total_phases: 9
   completed_phases: 0
@@ -22,8 +22,8 @@ See: .planning/PROJECT.md (updated 2026-06-02)
 
 Phase: 1 of 9 (OpenTUI Shell)
 Plan: 0 of 2 in current phase
-Status: Ready for layout review before source implementation
-Last activity: 2026-06-02 - Set author selection to single-author v1 scope
+Status: Ready to execute
+Last activity: 2026-06-02 - Planned Phase 1 with 2 executable plans
 
 Progress: [..........] 0%
 

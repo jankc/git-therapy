@@ -35,7 +35,13 @@ Build git-therapy as a sequence of demonstrable vertical slices: first the termi
 **Plans**: 2 plans
 
 Plans:
+
+**Wave 1**
+
 - [ ] 01-01: Layout shell and focus state.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-02: Keyboard handling for Tab, q, and perspective hotkeys.
 
 ### Phase 2: Git Blame Parser
