@@ -72,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-02T11:32:44.606Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/GT-01-opentui-shell/01-CONTEXT.md
+Last session: 2026-06-02T12:01:19.264Z
+Stopped at: Phase 1 UI-SPEC approved
+Resume file: .planning/phases/GT-01-opentui-shell/01-UI-SPEC.md
