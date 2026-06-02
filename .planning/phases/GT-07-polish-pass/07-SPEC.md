@@ -14,9 +14,9 @@ After Phase 6, the tool should work but may still lack highlight polish, loading
 
 ## Requirements
 
-1. **Selected line highlighting**: Source lines for selected authors are highlighted.
+1. **Selected line highlighting**: Source lines for the selected author are highlighted.
    - Current: Selection affects author pane and analysis only.
-   - Target: Source pane subtly highlights lines belonging to selected author(s).
+   - Target: Source pane subtly highlights lines belonging to the selected author.
    - Acceptance: Toggling an author visibly changes that author's source lines.
 
 2. **Loading state**: Analysis pane clearly shows active perspective while streaming.

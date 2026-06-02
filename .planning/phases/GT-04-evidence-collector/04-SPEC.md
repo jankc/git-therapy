@@ -6,7 +6,7 @@
 
 ## Goal
 
-For selected author(s), the app produces the complete `AuthorEvidence` shape required by the LLM prompts.
+For the selected author, the app produces the complete `AuthorEvidence` shape required by the LLM prompts.
 
 ## Background
 
@@ -27,7 +27,7 @@ After Phase 3, the app knows which lines and authors are selected. It still lack
 3. **AuthorEvidence contract**: App emits the exact evidence shape from `DESIGN.md`.
    - Current: No LLM input object exists.
    - Target: Evidence object includes author, linesAuthored, lineRanges, commits, aggregates, and scopeCode.
-   - Acceptance: A schema/type check verifies all required fields are present for selected author(s).
+   - Acceptance: A schema/type check verifies all required fields are present for the selected author.
 
 ## Boundaries
 
@@ -35,7 +35,7 @@ After Phase 3, the app knows which lines and authors are selected. It still lack
 - `src/git/log.ts` commit history collection.
 - `src/git/evidence.ts` aggregation.
 - Unit-testable evidence shape.
-- Support for multiple selected authors.
+- Support for exactly one selected author at a time.
 
 **Out of scope:**
 - LLM prompts or provider calls - Phase 5.

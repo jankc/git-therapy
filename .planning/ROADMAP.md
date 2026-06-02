@@ -12,7 +12,7 @@ Build git-therapy as a sequence of demonstrable vertical slices: first the termi
 
 - [ ] **Phase 1: OpenTUI Shell** - Three empty panes, focus handling, quit behavior, and no-op hotkeys.
 - [ ] **Phase 2: Git Blame Parser** - Parse a real file scope and render blame-prefixed source lines.
-- [ ] **Phase 3: Authors Pane** - Derive authors from blame data and support multi-selection.
+- [ ] **Phase 3: Authors Pane** - Derive authors from blame data and support single-author selection.
 - [ ] **Phase 4: Evidence Collector** - Produce the full `AuthorEvidence` input shape.
 - [ ] **Phase 5: Mental Perspective** - First end-to-end streaming LLM analysis with metric bars.
 - [ ] **Phase 6: Skill Perspective** - Add second perspective and verify hotkey re-streaming.
@@ -55,7 +55,7 @@ Plans:
 - [ ] 02-02: Blame parser and source pane rendering.
 
 ### Phase 3: Authors Pane
-**Goal**: The authors pane lists contributors in scope with line share and supports multi-author keyboard selection.
+**Goal**: The authors pane lists contributors in scope with line share and supports single-author keyboard selection.
 **Mode:** mvp
 **Depends on**: Phase 2
 **Requirements**: [TUI-03, SEL-01, SEL-02]
@@ -63,15 +63,15 @@ Plans:
   1. Authors pane derives authors from blame data.
   2. Each author shows line-count share.
   3. Up/Down moves the author cursor.
-  4. Space toggles one or more selected authors.
+  4. Space or Enter selects the highlighted author.
 **Plans**: 2 plans
 
 Plans:
 - [ ] 03-01: Author derivation and line share calculation.
-- [ ] 03-02: Cursor movement and multi-select behavior.
+- [ ] 03-02: Cursor movement and single-select behavior.
 
 ### Phase 4: Evidence Collector
-**Goal**: The app creates complete, testable `AuthorEvidence` objects for selected author(s).
+**Goal**: The app creates complete, testable `AuthorEvidence` objects for the selected author.
 **Mode:** mvp
 **Depends on**: Phase 3
 **Requirements**: [GIT-02, GIT-03, GIT-04]
@@ -105,7 +105,7 @@ Plans:
 - [ ] 05-03: Streaming analysis pane and metric bar renderer.
 
 ### Phase 6: Skill Perspective
-**Goal**: Hotkey `2` switches to Skill & experience and re-streams analysis for the same selected author(s).
+**Goal**: Hotkey `2` switches to Skill & experience and re-streams analysis for the same selected author.
 **Mode:** mvp
 **Depends on**: Phase 5
 **Requirements**: [PRS-02, PRS-05, AI-07]
@@ -126,7 +126,7 @@ Plans:
 **Depends on**: Phase 6
 **Requirements**: [TUI-06, AI-08]
 **Success Criteria** (what must be TRUE):
-  1. Source lines for selected authors are highlighted.
+  1. Source lines for the selected author are highlighted.
   2. Analysis pane has clear loading and failure states.
   3. User can retry after a model failure.
   4. Color choices preserve the deadpan blame-like aesthetic.
@@ -160,7 +160,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. README explains install, run, premise, and controls.
   2. Demo notes identify a reliable target repo and file.
-  3. Demo flow can show author selection, streaming, perspective switching, and multi-author comparison.
+  3. Demo flow can show author selection, streaming, perspective switching, and re-running on a second author.
 **Plans**: 2 plans
 
 Plans:

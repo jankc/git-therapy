@@ -21,7 +21,7 @@ Every absurd inference must be grounded in specific git evidence while the tool 
 
 - [ ] Single-file TUI invocation analyzes `git-therapy <path>` and optional `path:start-end` scopes.
 - [ ] Three panes remain visible: source/blame, authors/selection, and streaming analysis.
-- [ ] Author list supports keyboard navigation and multi-author selection.
+- [ ] Author list supports keyboard navigation and single-author selection.
 - [ ] Git evidence is collected from blame data plus per-author commit history and aggregates.
 - [ ] Four perspectives are implemented through a registry with distinct prompts, schemas, and renderers.
 - [ ] The first three perspectives render metric bars with cited evidence.

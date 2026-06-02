@@ -26,7 +26,7 @@ After Phase 8, all product behavior should exist. The remaining work is packagin
 
 3. **Talk arc rehearsal**: Demo flow is documented and repeatable.
    - Current: Talk arc exists only in `DESIGN.md`.
-   - Target: README or demo notes list the steps: open, select author, stream, switch perspectives, select second author.
+   - Target: README or demo notes list the steps: open, select author, stream, switch perspectives, move to a second author.
    - Acceptance: A presenter can rehearse the sequence from the docs without guessing.
 
 ## Boundaries

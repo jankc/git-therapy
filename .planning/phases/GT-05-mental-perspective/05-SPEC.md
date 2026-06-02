@@ -63,7 +63,7 @@ After Phase 4, the app can produce grounded git evidence. It still needs the AI 
 - Every metric must cite specific facts from `AuthorEvidence`.
 - The model must return JSON only.
 - Humor must come from the measured categories, not joke writing.
-- Perspective or author changes must be capable of starting fresh streams.
+- Perspective or selected-author changes must be capable of starting fresh streams.
 
 ## Acceptance Criteria
 

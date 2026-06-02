@@ -18,13 +18,13 @@
 - [ ] **TUI-03**: Authors pane displays each author touching the scope with line-count share.
 - [ ] **TUI-04**: Analysis pane displays an analyzing state, selected perspective name, result content, and hotkey footer.
 - [ ] **TUI-05**: User can cycle focus between panes with Tab.
-- [ ] **TUI-06**: Lines belonging to selected author(s) are subtly highlighted.
+- [ ] **TUI-06**: Lines belonging to the selected author are subtly highlighted.
 
 ### Author Selection
 
 - [ ] **SEL-01**: User can move the author cursor with Up/Down arrows.
-- [ ] **SEL-02**: User can toggle one or more selected authors with Space.
-- [ ] **SEL-03**: Changing selected author(s) triggers a fresh analysis stream for the active perspective.
+- [ ] **SEL-02**: User can select the highlighted author with Space or Enter.
+- [ ] **SEL-03**: Changing the selected author triggers a fresh analysis stream for the active perspective.
 
 ### Git Evidence
 
@@ -58,7 +58,7 @@
 
 - [ ] **DEMO-01**: README explains install/run usage and the demo premise in one page.
 - [ ] **DEMO-02**: Demo notes identify a target repo/file that produces reliable output.
-- [ ] **DEMO-03**: Talk arc is preserved: open file, select author, stream analysis, switch perspectives, select second author.
+- [ ] **DEMO-03**: Talk arc is preserved: open file, select author, stream analysis, switch perspectives, move to a second author.
 
 ## v2 Requirements
 

@@ -6,7 +6,7 @@
 
 ## Goal
 
-Hotkey `2` switches from Mental to Skill & experience and triggers a fresh stream for the same selected author evidence.
+Hotkey `2` switches from Mental to Skill & experience and triggers a fresh stream for the same selected author's evidence.
 
 ## Background
 
@@ -44,7 +44,7 @@ After Phase 5, one perspective works end to end. The demo cut line requires prov
 ## Constraints
 
 - This phase is the minimum talk cut line.
-- The same selected author evidence must feed both Mental and Skill perspectives.
+- The same selected author's evidence must feed both Mental and Skill perspectives.
 - No cache should be introduced for v1.
 
 ## Acceptance Criteria

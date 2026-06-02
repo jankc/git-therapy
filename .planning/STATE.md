@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-06-02)
 Phase: 1 of 9 (OpenTUI Shell)
 Plan: 0 of 2 in current phase
 Status: Ready for layout review before source implementation
-Last activity: 2026-06-02 - Initialized GSD planning artifacts from DESIGN.md
+Last activity: 2026-06-02 - Set author selection to single-author v1 scope
 
 Progress: [..........] 0%
 
@@ -54,6 +54,7 @@ Recent decisions affecting current work:
 - Initialization: Use `DESIGN.md` as canonical v1 product/design source.
 - Initialization: Use fine-grained sequential phases matching the specified build order.
 - Initialization: Treat phase specs as locked WHAT/WHY inputs before discuss/plan.
+- Scope update: v1 supports one selected author at a time; moving to a second author re-runs analysis instead of comparing several authors simultaneously.
 
 ### Pending Todos
 

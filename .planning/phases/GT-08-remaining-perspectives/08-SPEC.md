@@ -22,7 +22,7 @@ After Phase 7, Mental and Skill perspectives work with metric bars. The final pe
 2. **Hidden perspective**: Registry includes Hidden narratives on hotkey `4`.
    - Current: Hidden perspective does not exist.
    - Target: Prompt returns the four narrative sections from `DESIGN.md`.
-   - Acceptance: Pressing `4` streams Hidden analysis for the selected author(s).
+   - Acceptance: Pressing `4` streams Hidden analysis for the selected author.
 
 3. **Narrative renderer**: Hidden output renders narrative sections, not metric bars.
    - Current: Only metric renderer exists.
