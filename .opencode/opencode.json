@@ -1,0 +1,10 @@
+{
+  "permission": {
+    "read": {
+      "/Users/jank/dev/personal/git-therapy/.opencode/get-shit-done/*": "allow"
+    },
+    "external_directory": {
+      "/Users/jank/dev/personal/git-therapy/.opencode/get-shit-done/*": "allow"
+    }
+  }
+}
