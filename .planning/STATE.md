@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_complete
+status: completed
 stopped_at: Completed GT-01-opentui-shell plan 01-02 - keyboard wiring for Tab, q, and inert hotkeys
-last_updated: "2026-06-02T13:15:00Z"
-last_activity: 2026-06-02 -- Phase 01 complete (both plans done)
+last_updated: "2026-06-02T13:25:34.619Z"
+last_activity: 2026-06-02
 progress:
   total_phases: 9
   completed_phases: 1
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-02)
 
 ## Current Position
 
-Phase: 01 (opentui-shell) — COMPLETE
-Plan: 2 of 2 (all plans done)
+Phase: 2
+Plan: Not started
 Status: Phase complete, ready for Phase 2
-Last activity: 2026-06-02 -- Phase 01 complete (both plans done)
+Last activity: 2026-06-02
 
 Progress: [#.........] 11%
 
@@ -36,7 +36,7 @@ Progress: [#.........] 11%
 
 **Velocity:**
 
-- Total plans completed: 2
+- Total plans completed: 4
 - Average duration: ~20 min
 - Total execution time: 0.7 hours
 
@@ -45,6 +45,7 @@ Progress: [#.........] 11%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-opentui-shell | 2 | ~40 min | ~20 min |
+| 01 | 2 | - | - |
 
 **Recent Trend:**
 
