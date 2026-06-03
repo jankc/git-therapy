@@ -28,7 +28,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   },
   kimi: {
     baseURL: "https://api.moonshot.ai/v1",
-    envKey: "MOONSHOT_API_KEY",
+    envKey: "KIMI_API_KEY",
     model: process.env.KIMI_MODEL ?? "kimi-k2.6",
   },
   zai: {
@@ -85,6 +85,17 @@ function estimateTokens(chars: number): number {
   return Math.ceil(chars / 4);
 }
 
+/** Extract the most useful message from an AI SDK / API error (incl. retry wrappers). */
+function describeError(err: unknown): string {
+  const e = err as { statusCode?: number; message?: string; lastError?: unknown; errors?: unknown[] };
+  const inner = (e?.lastError ?? e?.errors?.[e.errors.length - 1]) as
+    | { statusCode?: number; message?: string }
+    | undefined;
+  const status = e?.statusCode ?? inner?.statusCode;
+  const message = e?.message ?? inner?.message ?? String(err);
+  return status ? `${status}: ${message}` : message;
+}
+
 /** Pull a JSON object out of model text, tolerating fences / stray prose. */
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
@@ -133,14 +144,31 @@ export async function generateAnalysis(
     const attemptSystem =
       attempt === 0
         ? system
-        : system + "\nYour previous reply was not valid JSON. Output ONLY the JSON object now.";
-    const result = streamText({ model, system: attemptSystem, prompt, abortSignal: signal });
+        : system +
+          "\nYour previous reply was not valid JSON. Output ONLY the JSON object now.";
+    // streamText routes API/network errors to onError and ends the text stream
+    // empty (surfacing only a useless "No output generated" later). Capture the
+    // real error here so it can be reported instead.
+    let streamError: unknown;
+    const result = streamText({
+      model,
+      system: attemptSystem,
+      prompt,
+      abortSignal: signal,
+      onError: ({ error }) => {
+        streamError = error;
+      },
+    });
 
     let text = "";
     for await (const delta of result.textStream) {
       text += delta;
       onProgress?.(estimateTokens(text.length)); // live estimate
     }
+
+    // An API/network failure (e.g. 429 insufficient balance) is not a parse
+    // problem — surface it immediately rather than retrying.
+    if (streamError) throw new Error(describeError(streamError));
 
     // Exact usage resolves once the stream finishes; fall back to a char-based
     // estimate when the provider omits usage (e.g. some local Ollama builds).
