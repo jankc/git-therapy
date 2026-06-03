@@ -1,11 +1,13 @@
 // The authors pane: a keyboard-selectable list of contributors in scope.
 
 import { useEffect, useRef } from "react";
-import type { SelectOption, SelectRenderable } from "@opentui/core";
+import { RGBA, type SelectOption, type SelectRenderable } from "@opentui/core";
 import type { AuthorEvidence } from "../types";
 
 const NEUTRAL = "#4B5563";
 const ACCENT = "#A6E22E";
+const TRANSPARENT = RGBA.fromValues(0, 0, 0, 0); // inherit the pane background
+const CURSOR_BG = "#1F2937"; // subtle dark band for the highlighted row
 
 interface WhoPaneProps {
   focused: boolean;
@@ -44,7 +46,10 @@ export function WhoPane({ focused, authors, onSelect }: WhoPaneProps) {
         ref={ref}
         focused={focused}
         options={options}
-        focusedBackgroundColor={ACCENT}
+        backgroundColor={TRANSPARENT}
+        focusedBackgroundColor={TRANSPARENT}
+        selectedBackgroundColor={CURSOR_BG}
+        selectedTextColor={ACCENT}
         showDescription
         style={{ flexGrow: 1 }}
         onSelect={(index) => {
