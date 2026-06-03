@@ -27,9 +27,11 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     model: process.env.KIMI_MODEL ?? "kimi-k2.6",
   },
   zai: {
-    baseURL: "https://open.bigmodel.cn/api/paas/v4",
+    // z.ai international OpenAI-compatible endpoint. For the China BigModel
+    // platform use https://open.bigmodel.cn/api/paas/v4 instead.
+    baseURL: process.env.ZAI_BASE_URL ?? "https://api.z.ai/api/paas/v4",
     envKey: "ZAI_API_KEY",
-    model: process.env.ZAI_MODEL ?? "glm-4.7",
+    model: process.env.ZAI_MODEL ?? "glm-4.6",
   },
 };
 
