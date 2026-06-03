@@ -5,11 +5,13 @@
 // `json_schema` support, which Kimi and local Ollama models lack.
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { generateText, type LanguageModel } from "ai";
 import type { AuthorEvidence } from "./types";
 import type { Perspective } from "./perspectives";
 
 interface ProviderConfig {
+  kind: "openai" | "anthropic"; // wire protocol the endpoint speaks
   baseURL: string;
   envKey: string | null; // null = no key needed (ollama)
   model: string;
@@ -17,19 +19,22 @@ interface ProviderConfig {
 
 const PROVIDERS: Record<string, ProviderConfig> = {
   ollama: {
+    kind: "openai",
     baseURL: "http://localhost:11434/v1",
     envKey: null,
     model: process.env.OLLAMA_MODEL ?? "qwen3.6:27b-mlx",
   },
   kimi: {
+    kind: "openai",
     baseURL: "https://api.moonshot.ai/v1",
     envKey: "MOONSHOT_API_KEY",
     model: process.env.KIMI_MODEL ?? "kimi-k2.6",
   },
   zai: {
-    // z.ai international OpenAI-compatible endpoint. For the China BigModel
-    // platform use https://open.bigmodel.cn/api/paas/v4 instead.
-    baseURL: process.env.ZAI_BASE_URL ?? "https://api.z.ai/api/paas/v4",
+    // z.ai GLM via its Anthropic-compatible endpoint (same one Claude Code uses).
+    // Auth is a bearer token. Override URL/model with ZAI_BASE_URL / ZAI_MODEL.
+    kind: "anthropic",
+    baseURL: process.env.ZAI_BASE_URL ?? "https://api.z.ai/api/anthropic",
     envKey: "ZAI_API_KEY",
     model: process.env.ZAI_MODEL ?? "glm-4.6",
   },
@@ -63,6 +68,25 @@ export function activeModelLabel(): string {
   return `${ACTIVE}:${cfg.model}`;
 }
 
+/** Construct the AI SDK model for the active provider's wire protocol. */
+function buildModel(cfg: ProviderConfig): LanguageModel {
+  if (cfg.kind === "anthropic") {
+    const key = process.env[cfg.envKey!]!;
+    const anthropic = createAnthropic({
+      baseURL: cfg.baseURL,
+      apiKey: key, // sent as x-api-key
+      headers: { authorization: `Bearer ${key}` }, // z.ai uses a bearer auth token
+    });
+    return anthropic(cfg.model);
+  }
+  const openai = createOpenAICompatible({
+    name: ACTIVE,
+    baseURL: cfg.baseURL,
+    apiKey: cfg.envKey ? process.env[cfg.envKey]! : "ollama",
+  });
+  return openai(cfg.model);
+}
+
 /** Pull a JSON object out of model text, tolerating fences / stray prose. */
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
@@ -94,12 +118,7 @@ export async function generateAnalysis(
   signal?: AbortSignal,
 ): Promise<unknown> {
   const cfg = activeConfig();
-  const provider = createOpenAICompatible({
-    name: ACTIVE,
-    baseURL: cfg.baseURL,
-    apiKey: cfg.envKey ? process.env[cfg.envKey]! : "ollama",
-  });
-  const model = provider(cfg.model);
+  const model = buildModel(cfg);
 
   const system =
     perspective.system +
