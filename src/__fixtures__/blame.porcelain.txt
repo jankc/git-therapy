@@ -1,0 +1,72 @@
+be00f9da35f29555c005ee6b7e7f2204ed77b644 1 1 6
+author Jan Krapac
+author-mail <gitgut@momosantiri.com>
+author-time 1780404125
+author-tz +0200
+committer Jan Krapac
+committer-mail <gitgut@momosantiri.com>
+committer-time 1780404125
+committer-tz +0200
+summary feat(01-01): implement typed pane focus helpers
+filename src/focus.ts
+	export const PANE_IDS = ["what", "who", "why"] as const;
+be00f9da35f29555c005ee6b7e7f2204ed77b644 2 2
+author Jan Krapac
+author-mail <gitgut@momosantiri.com>
+author-time 1780404125
+author-tz +0200
+committer Jan Krapac
+committer-mail <gitgut@momosantiri.com>
+committer-time 1780404125
+committer-tz +0200
+summary feat(01-01): implement typed pane focus helpers
+filename src/focus.ts
+	
+be00f9da35f29555c005ee6b7e7f2204ed77b644 3 3
+author Jan Krapac
+author-mail <gitgut@momosantiri.com>
+author-time 1780404125
+author-tz +0200
+committer Jan Krapac
+committer-mail <gitgut@momosantiri.com>
+committer-time 1780404125
+committer-tz +0200
+summary feat(01-01): implement typed pane focus helpers
+filename src/focus.ts
+	export type PaneId = (typeof PANE_IDS)[number];
+be00f9da35f29555c005ee6b7e7f2204ed77b644 4 4
+author Jan Krapac
+author-mail <gitgut@momosantiri.com>
+author-time 1780404125
+author-tz +0200
+committer Jan Krapac
+committer-mail <gitgut@momosantiri.com>
+committer-time 1780404125
+committer-tz +0200
+summary feat(01-01): implement typed pane focus helpers
+filename src/focus.ts
+	
+be00f9da35f29555c005ee6b7e7f2204ed77b644 5 5
+author Jan Krapac
+author-mail <gitgut@momosantiri.com>
+author-time 1780404125
+author-tz +0200
+committer Jan Krapac
+committer-mail <gitgut@momosantiri.com>
+committer-time 1780404125
+committer-tz +0200
+summary feat(01-01): implement typed pane focus helpers
+filename src/focus.ts
+	export const INITIAL_FOCUSED_PANE_ID: PaneId = "what";
+be00f9da35f29555c005ee6b7e7f2204ed77b644 6 6
+author Jan Krapac
+author-mail <gitgut@momosantiri.com>
+author-time 1780404125
+author-tz +0200
+committer Jan Krapac
+committer-mail <gitgut@momosantiri.com>
+committer-time 1780404125
+committer-tz +0200
+summary feat(01-01): implement typed pane focus helpers
+filename src/focus.ts
+	
