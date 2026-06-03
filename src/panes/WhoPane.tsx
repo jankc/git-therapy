@@ -1,6 +1,7 @@
 // The authors pane: a keyboard-selectable list of contributors in scope.
 
-import type { SelectOption } from "@opentui/core";
+import { useEffect, useRef } from "react";
+import type { SelectOption, SelectRenderable } from "@opentui/core";
 import type { AuthorEvidence } from "../types";
 
 const NEUTRAL = "#4B5563";
@@ -13,6 +14,12 @@ interface WhoPaneProps {
 }
 
 export function WhoPane({ focused, authors, onSelect }: WhoPaneProps) {
+  const ref = useRef<SelectRenderable>(null);
+  // Imperatively grab keyboard focus so arrow keys move the author cursor.
+  useEffect(() => {
+    if (focused) ref.current?.focus();
+  }, [focused]);
+
   const totalLines = authors.reduce((s, a) => s + a.linesAuthored, 0) || 1;
 
   const options: SelectOption[] = authors.map((a) => {
@@ -28,15 +35,13 @@ export function WhoPane({ focused, authors, onSelect }: WhoPaneProps) {
     <box
       title="Who"
       border
-      borderColor={NEUTRAL}
-      focusedBorderColor={ACCENT}
-      focusable
-      focused={focused}
+      borderColor={focused ? ACCENT : NEUTRAL}
       padding={1}
       overflow="hidden"
       style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}
     >
       <select
+        ref={ref}
         focused={focused}
         options={options}
         focusedBackgroundColor={ACCENT}

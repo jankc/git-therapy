@@ -1,6 +1,7 @@
 // The source pane: each scoped line prefixed with a git-blame gutter.
 
-import { TextAttributes } from "@opentui/core";
+import { useEffect, useRef } from "react";
+import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import type { BlameLine } from "../types";
 
 const NEUTRAL = "#4B5563";
@@ -30,19 +31,22 @@ interface WhatPaneProps {
 }
 
 export function WhatPane({ focused, file, blame }: WhatPaneProps) {
+  const ref = useRef<ScrollBoxRenderable>(null);
+  // Imperatively grab keyboard focus so arrow keys scroll this pane.
+  useEffect(() => {
+    if (focused) ref.current?.focus();
+  }, [focused]);
+
   return (
     <box
       title={`What · ${file}`}
       border
-      borderColor={NEUTRAL}
-      focusedBorderColor={ACCENT}
-      focusable
-      focused={focused}
+      borderColor={focused ? ACCENT : NEUTRAL}
       padding={1}
       overflow="hidden"
       style={{ flexGrow: 3, flexBasis: 0, minWidth: 0 }}
     >
-      <scrollbox focused={focused} style={{ flexGrow: 1 }}>
+      <scrollbox ref={ref} focused={focused} style={{ flexGrow: 1 }}>
         {blame.length === 0 ? (
           <text attributes={TextAttributes.DIM}>No blame data for this scope.</text>
         ) : (
