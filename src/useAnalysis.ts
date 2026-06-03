@@ -24,11 +24,21 @@ export function useAnalysis(
 
     const controller = new AbortController();
     let cancelled = false;
-    setState({ status: "loading" });
+    let lastFlush = 0;
+    setState({ status: "loading", approxOutputTokens: 0 });
 
-    generateAnalysis(evidence, perspective, controller.signal)
-      .then((value) => {
-        if (!cancelled) setState({ status: "done", value });
+    // Throttle live token updates to ~10 Hz so streaming doesn't thrash renders.
+    const onProgress = (approx: number) => {
+      if (cancelled) return;
+      const now = performance.now();
+      if (now - lastFlush < 100) return;
+      lastFlush = now;
+      setState({ status: "loading", approxOutputTokens: approx });
+    };
+
+    generateAnalysis(evidence, perspective, controller.signal, onProgress)
+      .then(({ value, usage }) => {
+        if (!cancelled) setState({ status: "done", value, usage });
       })
       .catch((err) => {
         if (cancelled || controller.signal.aborted) return;

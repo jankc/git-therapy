@@ -1,6 +1,6 @@
 // Root component: three panes, focus cycling, perspective hotkeys, analysis wiring.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { INITIAL_FOCUSED_PANE_ID, getNextPaneId, type PaneId } from "./focus";
 import { getPerspective, perspectiveIndexForKey } from "./perspectives";
@@ -8,7 +8,7 @@ import { useAnalysis } from "./useAnalysis";
 import { WhatPane } from "./panes/WhatPane";
 import { WhoPane } from "./panes/WhoPane";
 import { WhyPane } from "./panes/WhyPane";
-import type { AuthorEvidence, BlameLine } from "./types";
+import type { AnalysisState, AuthorEvidence, BlameLine } from "./types";
 
 export interface AppProps {
   file: string;
@@ -23,6 +23,16 @@ export function App({ file, blame, authors }: AppProps) {
 
   const perspective = getPerspective(perspectiveIndex);
   const analysis = useAnalysis(selectedAuthor, perspective);
+
+  // Accumulate token spend across analyses (count each completed run once).
+  const [sessionTokens, setSessionTokens] = useState(0);
+  const countedRef = useRef<AnalysisState | null>(null);
+  useEffect(() => {
+    if (analysis.status === "done" && countedRef.current !== analysis) {
+      countedRef.current = analysis;
+      setSessionTokens((t) => t + analysis.usage.total);
+    }
+  }, [analysis]);
 
   useKeyboard((key) => {
     if (key.name === "tab") {
@@ -48,6 +58,7 @@ export function App({ file, blame, authors }: AppProps) {
         perspective={perspective}
         state={analysis}
         hasAuthor={selectedAuthor !== null}
+        sessionTokens={sessionTokens}
       />
     </box>
   );

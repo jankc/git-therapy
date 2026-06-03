@@ -12,7 +12,11 @@ const ERROR = "#F87171";
 const BAR_WIDTH = 18;
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
-function Spinner({ label }: { label: string }) {
+function fmtTokens(n: number): string {
+  return n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+function Spinner({ label, tokens }: { label: string; tokens: number }) {
   const [frame, setFrame] = useState(0);
   const [secs, setSecs] = useState(0);
   useEffect(() => {
@@ -26,7 +30,8 @@ function Spinner({ label }: { label: string }) {
   const glyph = SPINNER[frame % SPINNER.length] ?? "⠋";
   return (
     <text fg={ACCENT}>
-      {glyph} analyzing… <span fg={DIM}>{label}</span> <span fg={DIM}>({secs}s)</span>
+      {glyph} analyzing… <span fg={DIM}>{label}</span>{" "}
+      <span fg={DIM}>({secs}s · ~{fmtTokens(tokens)} tok)</span>
     </text>
   );
 }
@@ -89,19 +94,23 @@ interface WhyPaneProps {
   perspective: Perspective;
   state: AnalysisState;
   hasAuthor: boolean;
+  sessionTokens: number;
 }
 
-export function WhyPane({ focused, perspective, state, hasAuthor }: WhyPaneProps) {
+export function WhyPane({ focused, perspective, state, hasAuthor, sessionTokens }: WhyPaneProps) {
   const ref = useRef<ScrollBoxRenderable>(null);
   useEffect(() => {
     if (focused) ref.current?.focus();
   }, [focused]);
 
   let body: React.ReactNode;
+  let footer = "";
   if (!hasAuthor) {
     body = <text attributes={TextAttributes.DIM}>Select a suspect from the Who pane.</text>;
   } else if (state.status === "idle" || state.status === "loading") {
-    body = <Spinner label={perspective.label} />;
+    const tokens = state.status === "loading" ? state.approxOutputTokens : 0;
+    body = <Spinner label={perspective.label} tokens={tokens} />;
+    footer = `~${fmtTokens(tokens)} tok…`;
   } else if (state.status === "error") {
     body = <text fg={ERROR}>analysis failed: {state.message}</text>;
   } else if (perspective.renderer === "metric-bars") {
@@ -110,9 +119,14 @@ export function WhyPane({ focused, perspective, state, hasAuthor }: WhyPaneProps
     body = <NarrativeView result={state.value as NarrativeResult} />;
   }
 
+  if (state.status === "done") {
+    footer = `${state.usage.output} out · ${fmtTokens(state.usage.total)} tok · session ${fmtTokens(sessionTokens)}`;
+  }
+
   return (
     <box
       title={`Why · ${perspective.label} [${perspective.hotkey}]`}
+      bottomTitle={footer}
       border
       borderColor={focused ? ACCENT : NEUTRAL}
       padding={1}

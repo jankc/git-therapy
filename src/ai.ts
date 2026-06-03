@@ -5,9 +5,14 @@
 // `json_schema` support, which Kimi and local Ollama models lack.
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText } from "ai";
-import type { AuthorEvidence } from "./types";
+import { streamText } from "ai";
+import type { AuthorEvidence, TokenUsage } from "./types";
 import type { Perspective } from "./perspectives";
+
+export interface AnalysisResult {
+  value: unknown;
+  usage: TokenUsage;
+}
 
 interface ProviderConfig {
   baseURL: string;
@@ -31,8 +36,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     // reuses the same key you use with Claude Code). For a regular pay-as-you-go
     // key use https://api.z.ai/api/paas/v4. Override with ZAI_BASE_URL / ZAI_MODEL.
     baseURL: process.env.ZAI_BASE_URL ?? "https://api.z.ai/api/coding/paas/v4",
-    envKey: "ZAI_API_KEY",
-    model: process.env.ZAI_MODEL ?? "glm-4.6",
+    envKey: "Z_AI_API_TOKEN",
+    model: process.env.ZAI_MODEL ?? "glm-5.1",
   },
 };
 
@@ -70,8 +75,14 @@ function buildModel(cfg: ProviderConfig) {
     name: ACTIVE,
     baseURL: cfg.baseURL,
     apiKey: cfg.envKey ? process.env[cfg.envKey]! : "ollama",
+    includeUsage: true, // request token usage in streaming responses
   });
   return openai(cfg.model);
+}
+
+/** Rough token estimate when a provider omits usage from the stream (~4 chars/token). */
+function estimateTokens(chars: number): number {
+  return Math.ceil(chars / 4);
 }
 
 /** Pull a JSON object out of model text, tolerating fences / stray prose. */
@@ -96,14 +107,17 @@ function extractJson(text: string): unknown {
 }
 
 /**
- * Run one analysis. Returns the schema-validated object (shape depends on the
- * perspective's renderer). Throws on persistent parse/validation failure or abort.
+ * Run one analysis. Streams the response so callers can show live progress via
+ * `onProgress` (approximate output-token count). Returns the schema-validated
+ * object plus exact token usage summed across any retries. Throws on persistent
+ * parse/validation failure or abort.
  */
 export async function generateAnalysis(
   evidence: AuthorEvidence,
   perspective: Perspective,
   signal?: AbortSignal,
-): Promise<unknown> {
+  onProgress?: (approxOutputTokens: number) => void,
+): Promise<AnalysisResult> {
   const cfg = activeConfig();
   const model = buildModel(cfg);
 
@@ -111,19 +125,40 @@ export async function generateAnalysis(
     perspective.system +
     "\nReturn ONLY the JSON object. No markdown, no code fences, no prose.";
 
+  const prompt = perspective.buildPrompt(evidence);
   let lastErr: unknown;
+  const usage: TokenUsage = { input: 0, output: 0, total: 0 };
+
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { text } = await generateText({
-      model,
-      system:
-        attempt === 0
-          ? system
-          : system + "\nYour previous reply was not valid JSON. Output ONLY the JSON object now.",
-      prompt: perspective.buildPrompt(evidence),
-      abortSignal: signal,
-    });
+    const attemptSystem =
+      attempt === 0
+        ? system
+        : system + "\nYour previous reply was not valid JSON. Output ONLY the JSON object now.";
+    const result = streamText({ model, system: attemptSystem, prompt, abortSignal: signal });
+
+    let text = "";
+    for await (const delta of result.textStream) {
+      text += delta;
+      onProgress?.(estimateTokens(text.length)); // live estimate
+    }
+
+    // Exact usage resolves once the stream finishes; fall back to a char-based
+    // estimate when the provider omits usage (e.g. some local Ollama builds).
+    const u = await result.usage;
+    const inTok = u.inputTokens ?? 0;
+    const outTok = u.outputTokens ?? 0;
+    if (inTok === 0 && outTok === 0) {
+      usage.input += estimateTokens(attemptSystem.length + prompt.length);
+      usage.output += estimateTokens(text.length);
+    } else {
+      usage.input += inTok;
+      usage.output += outTok;
+    }
+    usage.total = usage.input + usage.output;
+
     try {
-      return perspective.schema.parse(extractJson(text));
+      const value = perspective.schema.parse(extractJson(text));
+      return { value, usage };
     } catch (err) {
       lastErr = err;
     }

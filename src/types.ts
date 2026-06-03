@@ -49,9 +49,16 @@ export interface AuthorEvidence {
   scopeCode: string; // the scoped lines, with line numbers
 }
 
+/** Token spend for one analysis call (summed across any retries). */
+export interface TokenUsage {
+  input: number;
+  output: number;
+  total: number;
+}
+
 /** Result of analysis — async state machine for the Why pane. */
 export type AnalysisState =
   | { status: "idle" }
-  | { status: "loading" }
-  | { status: "done"; value: unknown }
+  | { status: "loading"; approxOutputTokens: number }
+  | { status: "done"; value: unknown; usage: TokenUsage }
   | { status: "error"; message: string };
