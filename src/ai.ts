@@ -5,13 +5,11 @@
 // `json_schema` support, which Kimi and local Ollama models lack.
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { generateText, type LanguageModel } from "ai";
+import { generateText } from "ai";
 import type { AuthorEvidence } from "./types";
 import type { Perspective } from "./perspectives";
 
 interface ProviderConfig {
-  kind: "openai" | "anthropic"; // wire protocol the endpoint speaks
   baseURL: string;
   envKey: string | null; // null = no key needed (ollama)
   model: string;
@@ -19,22 +17,20 @@ interface ProviderConfig {
 
 const PROVIDERS: Record<string, ProviderConfig> = {
   ollama: {
-    kind: "openai",
     baseURL: "http://localhost:11434/v1",
     envKey: null,
     model: process.env.OLLAMA_MODEL ?? "qwen3.6:27b-mlx",
   },
   kimi: {
-    kind: "openai",
     baseURL: "https://api.moonshot.ai/v1",
     envKey: "MOONSHOT_API_KEY",
     model: process.env.KIMI_MODEL ?? "kimi-k2.6",
   },
   zai: {
-    // z.ai GLM via its Anthropic-compatible endpoint (same one Claude Code uses).
-    // Auth is a bearer token. Override URL/model with ZAI_BASE_URL / ZAI_MODEL.
-    kind: "anthropic",
-    baseURL: process.env.ZAI_BASE_URL ?? "https://api.z.ai/api/anthropic",
+    // z.ai GLM via its OpenAI-compatible GLM Coding Plan endpoint (Bearer auth —
+    // reuses the same key you use with Claude Code). For a regular pay-as-you-go
+    // key use https://api.z.ai/api/paas/v4. Override with ZAI_BASE_URL / ZAI_MODEL.
+    baseURL: process.env.ZAI_BASE_URL ?? "https://api.z.ai/api/coding/paas/v4",
     envKey: "ZAI_API_KEY",
     model: process.env.ZAI_MODEL ?? "glm-4.6",
   },
@@ -68,17 +64,8 @@ export function activeModelLabel(): string {
   return `${ACTIVE}:${cfg.model}`;
 }
 
-/** Construct the AI SDK model for the active provider's wire protocol. */
-function buildModel(cfg: ProviderConfig): LanguageModel {
-  if (cfg.kind === "anthropic") {
-    const key = process.env[cfg.envKey!]!;
-    const anthropic = createAnthropic({
-      baseURL: cfg.baseURL,
-      apiKey: key, // sent as x-api-key
-      headers: { authorization: `Bearer ${key}` }, // z.ai uses a bearer auth token
-    });
-    return anthropic(cfg.model);
-  }
+/** Construct the OpenAI-compatible AI SDK model for the active provider. */
+function buildModel(cfg: ProviderConfig) {
   const openai = createOpenAICompatible({
     name: ACTIVE,
     baseURL: cfg.baseURL,
