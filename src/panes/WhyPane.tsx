@@ -94,7 +94,8 @@ export function WhyPane({ focused, perspective, state, hasAuthor }: WhyPaneProps
       focusable
       focused={focused}
       padding={1}
-      style={{ flexGrow: 1 }}
+      overflow="hidden"
+      style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}
     >
       <scrollbox focused={focused} style={{ flexGrow: 1 }}>
         {body}

@@ -39,7 +39,8 @@ export function WhatPane({ focused, file, blame }: WhatPaneProps) {
       focusable
       focused={focused}
       padding={1}
-      style={{ flexGrow: 3 }}
+      overflow="hidden"
+      style={{ flexGrow: 3, flexBasis: 0, minWidth: 0 }}
     >
       <scrollbox focused={focused} style={{ flexGrow: 1 }}>
         {blame.length === 0 ? (

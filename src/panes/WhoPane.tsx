@@ -33,13 +33,15 @@ export function WhoPane({ focused, authors, onSelect }: WhoPaneProps) {
       focusable
       focused={focused}
       padding={1}
-      style={{ flexGrow: 1 }}
+      overflow="hidden"
+      style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}
     >
       <select
         focused={focused}
         options={options}
         focusedBackgroundColor={ACCENT}
         showDescription
+        style={{ flexGrow: 1 }}
         onSelect={(index) => {
           const picked = authors[index];
           if (picked) onSelect(picked);
