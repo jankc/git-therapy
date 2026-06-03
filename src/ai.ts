@@ -27,7 +27,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     model: process.env.OLLAMA_MODEL ?? "qwen3.6:27b-mlx",
   },
   kimi: {
-    baseURL: "https://api.moonshot.ai/v1",
+    // baseURL: "https://api.moonshot.ai/v1",
+    baseURL: "https://api.kimi.com/coding/v1",
     envKey: "KIMI_API_KEY",
     model: process.env.KIMI_MODEL ?? "kimi-k2.6",
   },
@@ -87,7 +88,12 @@ function estimateTokens(chars: number): number {
 
 /** Extract the most useful message from an AI SDK / API error (incl. retry wrappers). */
 function describeError(err: unknown): string {
-  const e = err as { statusCode?: number; message?: string; lastError?: unknown; errors?: unknown[] };
+  const e = err as {
+    statusCode?: number;
+    message?: string;
+    lastError?: unknown;
+    errors?: unknown[];
+  };
   const inner = (e?.lastError ?? e?.errors?.[e.errors.length - 1]) as
     | { statusCode?: number; message?: string }
     | undefined;

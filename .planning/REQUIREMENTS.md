@@ -9,7 +9,7 @@
 
 - [ ] **CLI-01**: User can run `git-therapy <path>` to analyze one file.
 - [ ] **CLI-02**: User can run `git-therapy <path>:<start>-<end>` to analyze a line range.
-- [ ] **CLI-03**: User can quit the TUI with `q`.
+- [x] **CLI-03**: User can quit the TUI with `q`.
 
 ### Terminal UI
 
@@ -91,7 +91,7 @@
 |-------------|-------|--------|
 | CLI-01 | Phase 2 | Pending |
 | CLI-02 | Phase 2 | Pending |
-| CLI-03 | Phase 1 | Pending |
+| CLI-03 | Phase 1 | Complete |
 | TUI-01 | Phase 1 | Complete |
 | TUI-02 | Phase 2 | Pending |
 | TUI-03 | Phase 3 | Pending |
