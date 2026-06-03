@@ -1,7 +1,7 @@
 // Root component: three panes, focus cycling, perspective hotkeys, analysis wiring.
 
 import { useEffect, useRef, useState } from "react";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useRenderer } from "@opentui/react";
 import { INITIAL_FOCUSED_PANE_ID, getNextPaneId, type PaneId } from "./focus";
 import { getPerspective, perspectiveIndexForKey } from "./perspectives";
 import { useAnalysis } from "./useAnalysis";
@@ -21,8 +21,16 @@ export function App({ file, blame, authors }: AppProps) {
   const [perspectiveIndex, setPerspectiveIndex] = useState(0);
   const [selectedAuthor, setSelectedAuthor] = useState<AuthorEvidence | null>(null);
 
+  const renderer = useRenderer();
   const perspective = getPerspective(perspectiveIndex);
   const analysis = useAnalysis(selectedAuthor, perspective);
+
+  // Restore the terminal (disable mouse tracking, leave alt screen) before exit,
+  // otherwise the shell fills with mouse escape gibberish on cursor movement.
+  function quit(): void {
+    renderer?.destroy();
+    process.exit(0);
+  }
 
   // Accumulate token spend across analyses (count each completed run once).
   const [sessionTokens, setSessionTokens] = useState(0);
@@ -38,7 +46,7 @@ export function App({ file, blame, authors }: AppProps) {
     if (key.name === "tab") {
       setFocusedPane((current) => getNextPaneId(current));
     } else if (key.name === "q") {
-      process.exit(0);
+      quit();
     } else {
       const idx = perspectiveIndexForKey(key.name);
       if (idx !== null) setPerspectiveIndex(idx);
