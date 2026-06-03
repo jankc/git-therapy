@@ -26,6 +26,9 @@ export const NarrativeSchema = z.object({
     .max(6),
 });
 
+export type MetricsResult = z.infer<typeof MetricsSchema>;
+export type NarrativeResult = z.infer<typeof NarrativeSchema>;
+
 export type Renderer = "metric-bars" | "narrative";
 
 export interface Perspective {
