@@ -76,8 +76,22 @@ describe("bucketByAuthor", () => {
 
 describe("buildAuthorEvidence", () => {
   const lines: BlameLine[] = [
-    blame({ lineNumber: 1, author: "Jane", authorMail: "jane@x.com" }),
-    blame({ lineNumber: 2, author: "Jane", authorMail: "jane@x.com" }),
+    blame({
+      lineNumber: 1,
+      sha: "1111111",
+      author: "Jane",
+      authorMail: "jane@x.com",
+      summary: "fix ugh",
+      code: "const x = 1;",
+    }),
+    blame({
+      lineNumber: 2,
+      sha: "3333333",
+      author: "Jane",
+      authorMail: "jane@x.com",
+      summary: "missing from log",
+      code: "const y = 2;",
+    }),
     blame({ lineNumber: 3, author: "Bob", authorMail: "bob@x.com" }),
   ];
   const commits: RawCommit[] = [
@@ -113,32 +127,54 @@ describe("buildAuthorEvidence", () => {
     expect(evidence[0]?.lineRanges).toEqual([[1, 2]]);
   });
 
-  test("commits attached, sorted, with minutesSincePrevious", () => {
+  test("blamed lines include only the selected author's blamed lines", () => {
     const jane = evidence[0]!;
-    expect(jane.commits.length).toBe(2);
-    expect(jane.commits[0]?.minutesSincePrevious).toBeNull();
-    expect(jane.commits[1]?.minutesSincePrevious).toBe(60);
+    expect(jane.blamedLines).toEqual([
+      {
+        lineNumber: 1,
+        sha: "1111111",
+        authorTime: 0,
+        authorTz: "+0000",
+        summary: "fix ugh",
+        code: "const x = 1;",
+      },
+      {
+        lineNumber: 2,
+        sha: "3333333",
+        authorTime: 0,
+        authorTz: "+0000",
+        summary: "missing from log",
+        code: "const y = 2;",
+      },
+    ]);
+  });
+
+  test("blamed commits include only commits matching blamed line shas", () => {
+    const jane = evidence[0]!;
+    expect(jane.blamedCommits.map((c) => c.sha)).toEqual(["1111111"]);
+    expect(jane.blamedCommits[0]?.minutesSincePrevious).toBeNull();
   });
 
   test("hour histogram uses local offset", () => {
-    expect(evidence[0]?.aggregates.hourHistogram).toEqual({ 2: 1, 3: 1 });
+    expect(evidence[0]?.authorBaseline.hourHistogram).toEqual({ 2: 1, 3: 1 });
   });
 
-  test("aggregates computed", () => {
-    const agg = evidence[0]!.aggregates;
-    expect(agg.totalCommits).toBe(2);
-    expect(agg.avgMessageLength).toBeGreaterThan(0);
-    expect(agg.wordFrequencies["wip"]).toBe(1);
+  test("author baseline includes all file commits by that author", () => {
+    const baseline = evidence[0]!.authorBaseline;
+    expect(baseline.totalFileCommits).toBe(2);
+    expect(baseline.avgMessageLength).toBeGreaterThan(0);
+    expect(baseline.wordFrequencies["wip"]).toBe(1);
   });
 
   test("author with no matching commits still appears", () => {
     const bob = evidence[1]!;
-    expect(bob.commits.length).toBe(0);
-    expect(bob.aggregates.totalCommits).toBe(0);
-    expect(bob.aggregates.timeSpanDays).toBe(0);
+    expect(bob.blamedLines.length).toBe(1);
+    expect(bob.blamedCommits.length).toBe(0);
+    expect(bob.authorBaseline.totalFileCommits).toBe(0);
+    expect(bob.authorBaseline.timeSpanDays).toBe(0);
   });
 
   test("isAmend stubbed false", () => {
-    expect(evidence[0]?.commits.every((c) => c.isAmend === false)).toBe(true);
+    expect(evidence[0]?.blamedCommits.every((c) => c.isAmend === false)).toBe(true);
   });
 });

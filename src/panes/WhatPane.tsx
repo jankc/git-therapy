@@ -39,12 +39,13 @@ export function WhatPane({ focused, file, blame }: WhatPaneProps) {
 
   return (
     <box
-      title={`What · ${file}`}
+      title="Symptoms"
+      bottomTitle={file}
       border
       borderColor={focused ? ACCENT : NEUTRAL}
       padding={1}
       overflow="hidden"
-      style={{ flexGrow: 3, flexBasis: 0, minWidth: 0 }}
+      style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, minHeight: 0 }}
     >
       <scrollbox ref={ref} focused={focused} style={{ flexGrow: 1 }}>
         {blame.length === 0 ? (

@@ -23,29 +23,46 @@ export interface RawCommit {
   deletions: number;
 }
 
+export interface BlamedLineEvidence {
+  lineNumber: number;
+  sha: string; // short (7) sha
+  authorTime: number; // unix seconds (commit author time)
+  authorTz: string; // e.g. "+0200"
+  summary: string; // blame summary for the line
+  code: string;
+}
+
+export interface EvidenceCommit {
+  sha: string;
+  timestamp: string; // ISO
+  weekday: string; // "Monday"…
+  hourLocal: number; // 0-23, from the commit's own offset
+  message: string;
+  additions: number;
+  deletions: number;
+  isAmend: boolean;
+  minutesSincePrevious: number | null;
+}
+
+export interface AuthorBaseline {
+  totalFileCommits: number;
+  hourHistogram: Record<number, number>;
+  avgMessageLength: number;
+  wordFrequencies: Record<string, number>;
+  timeSpanDays: number;
+}
+
 /** The structured evidence object fed to the LLM, per author. (Locked shape.) */
 export interface AuthorEvidence {
   author: { name: string; email: string };
   linesAuthored: number;
   lineRanges: Array<[number, number]>;
-  commits: Array<{
-    sha: string;
-    timestamp: string; // ISO
-    weekday: string; // "Monday"…
-    hourLocal: number; // 0-23, from the commit's own offset
-    message: string;
-    additions: number;
-    deletions: number;
-    isAmend: boolean;
-    minutesSincePrevious: number | null;
-  }>;
-  aggregates: {
-    totalCommits: number;
-    hourHistogram: Record<number, number>;
-    avgMessageLength: number;
-    wordFrequencies: Record<string, number>;
-    timeSpanDays: number;
-  };
+  /** Current blamed lines owned by this author. Primary model evidence. */
+  blamedLines: BlamedLineEvidence[];
+  /** Commits that introduced the current blamed lines. Primary model evidence. */
+  blamedCommits: EvidenceCommit[];
+  /** Broader author-in-this-file pattern data. Background context only. */
+  authorBaseline: AuthorBaseline;
   scopeCode: string; // the scoped lines, with line numbers
 }
 
@@ -59,6 +76,6 @@ export interface TokenUsage {
 /** Result of analysis — async state machine for the Why pane. */
 export type AnalysisState =
   | { status: "idle" }
-  | { status: "loading"; approxOutputTokens: number }
-  | { status: "done"; value: unknown; usage: TokenUsage }
-  | { status: "error"; message: string };
+  | { status: "loading"; requestId: number; approxOutputTokens: number }
+  | { status: "done"; requestId: number; value: unknown; usage: TokenUsage }
+  | { status: "error"; requestId: number; message: string };

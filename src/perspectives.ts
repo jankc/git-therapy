@@ -1,5 +1,5 @@
-// The perspective registry: one git evidence input, four prompts, four readings.
-// Perspectives 1-3 share the metric-bars schema; 4 (Hidden) uses narrative sections.
+// The perspective registry: one git evidence input, several prompts, several readings.
+// Most lenses share the metric-bars schema; "Hidden Narratives" uses narrative sections.
 
 import { z } from "zod";
 import type { AuthorEvidence } from "./types";
@@ -33,7 +33,6 @@ export type Renderer = "metric-bars" | "narrative";
 
 export interface Perspective {
   id: string;
-  hotkey: "1" | "2" | "3" | "4";
   label: string;
   renderer: Renderer;
   schema: z.ZodTypeAny;
@@ -46,7 +45,9 @@ const PERSONA =
   "You are a forensic analyst of software-engineering behavior — calm, clinical, " +
   "slightly pretentious. You are NOT a therapist or a comedian. " +
   "Every metric or claim MUST cite specific evidence drawn from the provided git data " +
-  "(commit hours, messages, additions/deletions, weekday, word frequencies, line ranges). " +
+  "(blamed lines, blamed commits, commit hours, messages, additions/deletions, weekday, word frequencies, line ranges). " +
+  "Base claims primarily on BLAMED LINES and BLAMED COMMITS. Use AUTHOR BASELINE only " +
+  "for background patterns, never as the sole basis for a claim. " +
   "Invent no facts. Do not joke, wink, or break the fourth wall — the analysis must read " +
   "like a lab report. Return ONLY a JSON object matching the requested shape: no markdown, " +
   "no code fences, no prose outside the JSON.";
@@ -64,16 +65,16 @@ function evidenceBlock(e: AuthorEvidence): string {
   return (
     `AUTHOR: ${e.author.name} <${e.author.email}>\n` +
     `LINES AUTHORED: ${e.linesAuthored} (ranges ${JSON.stringify(e.lineRanges)})\n` +
-    `AGGREGATES: ${JSON.stringify(e.aggregates)}\n` +
-    `COMMITS: ${JSON.stringify(e.commits)}\n` +
-    `SCOPE CODE:\n${e.scopeCode}`
+    `PRIMARY EVIDENCE — BLAMED LINES: ${JSON.stringify(e.blamedLines)}\n` +
+    `PRIMARY EVIDENCE — BLAMED COMMITS: ${JSON.stringify(e.blamedCommits)}\n` +
+    `BACKGROUND ONLY — AUTHOR BASELINE: ${JSON.stringify(e.authorBaseline)}\n` +
+    `SURROUNDING SOURCE CONTEXT — SCOPE CODE:\n${e.scopeCode}`
   );
 }
 
 export const PERSPECTIVES: Perspective[] = [
   {
     id: "mental",
-    hotkey: "1",
     label: "Mental & Emotional State",
     renderer: "metric-bars",
     schema: MetricsSchema,
@@ -90,7 +91,6 @@ export const PERSPECTIVES: Perspective[] = [
   },
   {
     id: "skill",
-    hotkey: "2",
     label: "Skill & Experience",
     renderer: "metric-bars",
     schema: MetricsSchema,
@@ -106,7 +106,6 @@ export const PERSPECTIVES: Perspective[] = [
   },
   {
     id: "context",
-    hotkey: "3",
     label: "Context & Circumstances",
     renderer: "metric-bars",
     schema: MetricsSchema,
@@ -122,7 +121,6 @@ export const PERSPECTIVES: Perspective[] = [
   },
   {
     id: "hidden",
-    hotkey: "4",
     label: "Hidden Narratives",
     renderer: "narrative",
     schema: NarrativeSchema,
@@ -136,14 +134,27 @@ export const PERSPECTIVES: Perspective[] = [
     buildPrompt: (e) =>
       `Reconstruct the hidden narratives behind this author's code.\n\n${evidenceBlock(e)}`,
   },
+  {
+    id: "ghostwriter",
+    label: "The Ghostwriter",
+    renderer: "metric-bars",
+    schema: MetricsSchema,
+    system: metricsInstruction([
+      "AI-authored probability",
+      "Boilerplate density",
+      "Comment uniformity",
+      "Naming blandness",
+      "Error-handling thoroughness",
+    ]),
+    buildPrompt: (e) =>
+      `Estimate the probability that an AI coding assistant (e.g. Copilot, ChatGPT, Claude) ` +
+      `wrote this code, and the stylistic tells behind that judgment. Higher means more ` +
+      `machine-authored. Weigh signals such as suspiciously uniform formatting, defensively ` +
+      `complete error handling, textbook-explanatory comments, conventional-but-bland naming, ` +
+      `and large polished additions landed in a single commit.\n\n${evidenceBlock(e)}`,
+  },
 ];
 
 export function getPerspective(index: number): Perspective {
   return PERSPECTIVES[index] ?? PERSPECTIVES[0]!;
-}
-
-/** Map a digit key ("1".."4") to its perspective index, or null. */
-export function perspectiveIndexForKey(key: string): number | null {
-  const idx = PERSPECTIVES.findIndex((p) => p.hotkey === key);
-  return idx === -1 ? null : idx;
 }

@@ -1,20 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import {
-  getPerspective,
-  MetricsSchema,
-  NarrativeSchema,
-  PERSPECTIVES,
-  perspectiveIndexForKey,
-} from "./perspectives";
+import { getPerspective, MetricsSchema, NarrativeSchema, PERSPECTIVES } from "./perspectives";
 import type { AuthorEvidence } from "./types";
 
 const EVIDENCE: AuthorEvidence = {
   author: { name: "Jane", email: "jane@x.com" },
   linesAuthored: 3,
   lineRanges: [[1, 3]],
-  commits: [],
-  aggregates: {
-    totalCommits: 0,
+  blamedLines: [
+    {
+      lineNumber: 1,
+      sha: "abc1234",
+      authorTime: 0,
+      authorTz: "+0000",
+      summary: "initial",
+      code: "const x = 1;",
+    },
+  ],
+  blamedCommits: [],
+  authorBaseline: {
+    totalFileCommits: 0,
     hourHistogram: {},
     avgMessageLength: 0,
     wordFrequencies: {},
@@ -24,54 +28,50 @@ const EVIDENCE: AuthorEvidence = {
 };
 
 describe("perspective registry", () => {
-  test("exactly 4 perspectives", () => {
-    expect(PERSPECTIVES.length).toBe(4);
-  });
-
-  test("hotkeys are 1-4 and unique", () => {
-    const keys = PERSPECTIVES.map((p) => p.hotkey);
-    expect(keys).toEqual(["1", "2", "3", "4"]);
-    expect(new Set(keys).size).toBe(4);
+  test("exactly 5 perspectives", () => {
+    expect(PERSPECTIVES.length).toBe(5);
   });
 
   test("ids are unique", () => {
-    expect(new Set(PERSPECTIVES.map((p) => p.id)).size).toBe(4);
+    expect(new Set(PERSPECTIVES.map((p) => p.id)).size).toBe(5);
   });
 
-  test("first three are metric-bars, last is narrative", () => {
-    expect(PERSPECTIVES.slice(0, 3).every((p) => p.renderer === "metric-bars")).toBe(true);
-    expect(PERSPECTIVES[3]?.renderer).toBe("narrative");
+  test("only Hidden Narratives uses the narrative renderer", () => {
+    for (const p of PERSPECTIVES) {
+      expect(p.renderer).toBe(p.id === "hidden" ? "narrative" : "metric-bars");
+    }
   });
 
   test("metric perspectives use MetricsSchema, hidden uses NarrativeSchema", () => {
-    expect(PERSPECTIVES[0]?.schema).toBe(MetricsSchema);
-    expect(PERSPECTIVES[3]?.schema).toBe(NarrativeSchema);
+    for (const p of PERSPECTIVES) {
+      expect(p.schema).toBe(p.id === "hidden" ? NarrativeSchema : MetricsSchema);
+    }
   });
 
   test("every system prompt forbids jokes and requires JSON-only", () => {
     for (const p of PERSPECTIVES) {
       expect(p.system).toContain("Return ONLY a JSON object");
       expect(p.system.toLowerCase()).toContain("evidence");
+      expect(p.system).toContain("BLAMED LINES");
+      expect(p.system).toContain("AUTHOR BASELINE");
     }
   });
 
-  test("buildPrompt embeds the scope code and author", () => {
+  test("buildPrompt embeds focused evidence, scope code, and author", () => {
     const prompt = PERSPECTIVES[0]!.buildPrompt(EVIDENCE);
     expect(prompt).toContain("1: const x = 1;");
     expect(prompt).toContain("jane@x.com");
+    expect(prompt).toContain("BLAMED LINES");
+    expect(prompt).toContain("BLAMED COMMITS");
+    expect(prompt).toContain("AUTHOR BASELINE");
+    expect(prompt).toContain("SCOPE CODE");
   });
 });
 
-describe("getPerspective / perspectiveIndexForKey", () => {
+describe("getPerspective", () => {
   test("index resolves, out-of-range falls back to first", () => {
     expect(getPerspective(1).id).toBe("skill");
     expect(getPerspective(99).id).toBe("mental");
-  });
-
-  test("digit key maps to index", () => {
-    expect(perspectiveIndexForKey("3")).toBe(2);
-    expect(perspectiveIndexForKey("9")).toBeNull();
-    expect(perspectiveIndexForKey("q")).toBeNull();
   });
 });
 

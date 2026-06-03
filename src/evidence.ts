@@ -1,7 +1,13 @@
 // Build the per-author AuthorEvidence objects from blame lines + commit log.
 // Pure and deterministic — the locked contract fed to the LLM.
 
-import type { AuthorEvidence, BlameLine, RawCommit } from "./types";
+import type {
+  AuthorBaseline,
+  AuthorEvidence,
+  BlameLine,
+  EvidenceCommit,
+  RawCommit,
+} from "./types";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -68,18 +74,69 @@ export function wordFrequencies(messages: string[], topN = 20): Record<string, n
 /** Group blame lines by author email → line numbers. */
 export function bucketByAuthor(
   lines: BlameLine[],
-): Map<string, { name: string; email: string; lineNumbers: number[] }> {
-  const buckets = new Map<string, { name: string; email: string; lineNumbers: number[] }>();
+): Map<string, { name: string; email: string; lineNumbers: number[]; lines: BlameLine[] }> {
+  const buckets = new Map<
+    string,
+    { name: string; email: string; lineNumbers: number[]; lines: BlameLine[] }
+  >();
   for (const line of lines) {
     const key = line.authorMail || line.author;
     let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { name: line.author, email: line.authorMail, lineNumbers: [] };
+      bucket = { name: line.author, email: line.authorMail, lineNumbers: [], lines: [] };
       buckets.set(key, bucket);
     }
     bucket.lineNumbers.push(line.lineNumber);
+    bucket.lines.push(line);
   }
   return buckets;
+}
+
+function toEvidenceCommits(commits: RawCommit[]): EvidenceCommit[] {
+  let prevMs: number | null = null;
+
+  return commits.map((c) => {
+    const { weekday, hour } = localParts(c.isoDate);
+    const ms = new Date(c.isoDate).getTime();
+    const minutesSincePrevious = prevMs === null ? null : Math.round((ms - prevMs) / 60_000);
+    prevMs = ms;
+    return {
+      sha: c.sha.slice(0, 7),
+      timestamp: c.isoDate,
+      weekday,
+      hourLocal: hour,
+      message: c.message,
+      additions: c.additions,
+      deletions: c.deletions,
+      isAmend: false, // stubbed for MVP — reliable detection needs reflog
+      minutesSincePrevious,
+    };
+  });
+}
+
+function buildAuthorBaseline(authorCommits: RawCommit[]): AuthorBaseline {
+  const hourHistogram: Record<number, number> = {};
+  const messages: string[] = [];
+
+  for (const c of authorCommits) {
+    const { hour } = localParts(c.isoDate);
+    hourHistogram[hour] = (hourHistogram[hour] ?? 0) + 1;
+    messages.push(c.message);
+  }
+
+  const times = authorCommits.map((c) => new Date(c.isoDate).getTime());
+  const timeSpanDays =
+    times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 86_400_000 : 0;
+  const avgMessageLength =
+    messages.length > 0 ? messages.reduce((s, m) => s + m.length, 0) / messages.length : 0;
+
+  return {
+    totalFileCommits: authorCommits.length,
+    hourHistogram,
+    avgMessageLength,
+    wordFrequencies: wordFrequencies(messages),
+    timeSpanDays,
+  };
 }
 
 export function buildAuthorEvidence(
@@ -95,52 +152,23 @@ export function buildAuthorEvidence(
       .filter((c) => (c.authorMail || c.authorName) === (bucket.email || bucket.name))
       .sort((a, b) => new Date(a.isoDate).getTime() - new Date(b.isoDate).getTime());
 
-    const hourHistogram: Record<number, number> = {};
-    let prevMs: number | null = null;
-    const messages: string[] = [];
-
-    const commitObjs = authorCommits.map((c) => {
-      const { weekday, hour } = localParts(c.isoDate);
-      hourHistogram[hour] = (hourHistogram[hour] ?? 0) + 1;
-      const ms = new Date(c.isoDate).getTime();
-      const minutesSincePrevious = prevMs === null ? null : Math.round((ms - prevMs) / 60_000);
-      prevMs = ms;
-      messages.push(c.message);
-      return {
-        sha: c.sha.slice(0, 7),
-        timestamp: c.isoDate,
-        weekday,
-        hourLocal: hour,
-        message: c.message,
-        additions: c.additions,
-        deletions: c.deletions,
-        isAmend: false, // stubbed for MVP — reliable detection needs reflog
-        minutesSincePrevious,
-      };
-    });
-
-    const times = authorCommits.map((c) => new Date(c.isoDate).getTime());
-    const timeSpanDays =
-      times.length > 1
-        ? (Math.max(...times) - Math.min(...times)) / 86_400_000
-        : 0;
-    const avgMessageLength =
-      messages.length > 0
-        ? messages.reduce((s, m) => s + m.length, 0) / messages.length
-        : 0;
+    const commitObjs = toEvidenceCommits(authorCommits);
+    const blamedShas = new Set(bucket.lines.map((line) => line.sha));
 
     result.push({
       author: { name: bucket.name, email: bucket.email },
       linesAuthored: bucket.lineNumbers.length,
       lineRanges: compactRanges(bucket.lineNumbers),
-      commits: commitObjs,
-      aggregates: {
-        totalCommits: commitObjs.length,
-        hourHistogram,
-        avgMessageLength,
-        wordFrequencies: wordFrequencies(messages),
-        timeSpanDays,
-      },
+      blamedLines: bucket.lines.map((line) => ({
+        lineNumber: line.lineNumber,
+        sha: line.sha,
+        authorTime: line.authorTime,
+        authorTz: line.authorTz,
+        summary: line.summary,
+        code: line.code,
+      })),
+      blamedCommits: commitObjs.filter((commit) => blamedShas.has(commit.sha)),
+      authorBaseline: buildAuthorBaseline(authorCommits),
       scopeCode,
     });
   }

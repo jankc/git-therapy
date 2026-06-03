@@ -40,40 +40,89 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     envKey: "Z_AI_API_TOKEN",
     model: process.env.ZAI_MODEL ?? "glm-5.1",
   },
+  deepseek: {
+    baseURL: "https://openrouter.ai/api/v1",
+    envKey: "OPENROUTER_API_KEY",
+    model: process.env.DEEPSEEK_MODEL ?? "deepseek/deepseek-chat-v3-0324",
+  },
+  qwen: {
+    baseURL: "https://openrouter.ai/api/v1",
+    envKey: "OPENROUTER_API_KEY",
+    model: process.env.QWEN_MODEL ?? "qwen/qwen3-235b-a22b",
+  },
+  gemini: {
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+    envKey: "GEMINI_API_KEY",
+    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+  },
 };
 
-const ACTIVE = process.env.GIT_THERAPY_PROVIDER ?? "ollama";
+// Cycle order for the in-app model selector ('m' key). The provider is no longer
+// frozen at startup — it is chosen at runtime and threaded into generateAnalysis.
+export const PROVIDER_ORDER = [
+  "ollama",
+  "kimi",
+  "zai",
+  "deepseek",
+  "qwen",
+  "gemini",
+] as const;
+export type ProviderId = (typeof PROVIDER_ORDER)[number];
 
-function activeConfig(): ProviderConfig {
-  const cfg = PROVIDERS[ACTIVE];
-  if (!cfg) {
-    throw new Error(
-      `Unknown GIT_THERAPY_PROVIDER "${ACTIVE}". Valid: ${Object.keys(PROVIDERS).join(", ")}.`,
-    );
-  }
+// Output language for the analysis ('l' key). The model writes all human-readable
+// text in this language; the JSON keys stay English so schema validation holds.
+export const LANGUAGES = ["English", "Czech"] as const;
+export type Language = (typeof LANGUAGES)[number];
+
+function languageInstruction(language: Language): string {
+  return (
+    `\nWrite every human-readable text value (metric names, evidence strings, notes, ` +
+    `section headings and bodies) in ${language}. ` +
+    `Do NOT translate the JSON keys themselves — keep them exactly as specified.`
+  );
+}
+
+export interface ProviderInfo {
+  id: ProviderId;
+  model: string;
+  /** true when no key is required (ollama) or the required key is present. */
+  hasKey: boolean;
+}
+
+function configFor(id: ProviderId): ProviderConfig {
+  const cfg = PROVIDERS[id];
+  if (!cfg) throw new Error(`Unknown provider "${id}".`);
   return cfg;
 }
 
-/** Preflight: throw a clear error if the active provider's key is missing. */
-export function assertApiKey(): void {
-  const cfg = activeConfig();
-  if (cfg.envKey && !process.env[cfg.envKey]) {
-    throw new Error(
-      `Missing ${cfg.envKey} for provider "${ACTIVE}". ` +
-        `Set it, or use GIT_THERAPY_PROVIDER=ollama for a local model.`,
-    );
-  }
+function keyPresent(cfg: ProviderConfig): boolean {
+  return !cfg.envKey || !!process.env[cfg.envKey];
 }
 
-export function activeModelLabel(): string {
-  const cfg = activeConfig();
-  return `${ACTIVE}:${cfg.model}`;
+/** All selectable providers with their model and key availability (for the UI). */
+export function listProviders(): ProviderInfo[] {
+  return PROVIDER_ORDER.map((id) => {
+    const cfg = configFor(id);
+    return { id, model: cfg.model, hasKey: keyPresent(cfg) };
+  });
 }
 
-/** Construct the OpenAI-compatible AI SDK model for the active provider. */
-function buildModel(cfg: ProviderConfig) {
+/** The provider to start on: GIT_THERAPY_PROVIDER if valid, else ollama. */
+export function defaultProviderId(): ProviderId {
+  const env = process.env.GIT_THERAPY_PROVIDER;
+  return env && (PROVIDER_ORDER as readonly string[]).includes(env)
+    ? (env as ProviderId)
+    : "ollama";
+}
+
+export function modelLabel(id: ProviderId): string {
+  return `${id} · ${configFor(id).model}`;
+}
+
+/** Construct the OpenAI-compatible AI SDK model for the given provider. */
+function buildModel(id: ProviderId, cfg: ProviderConfig) {
   const openai = createOpenAICompatible({
-    name: ACTIVE,
+    name: id,
     baseURL: cfg.baseURL,
     apiKey: cfg.envKey ? process.env[cfg.envKey]! : "ollama",
     includeUsage: true, // request token usage in streaming responses
@@ -132,14 +181,22 @@ function extractJson(text: string): unknown {
 export async function generateAnalysis(
   evidence: AuthorEvidence,
   perspective: Perspective,
+  providerId: ProviderId,
+  language: Language,
   signal?: AbortSignal,
   onProgress?: (approxOutputTokens: number) => void,
 ): Promise<AnalysisResult> {
-  const cfg = activeConfig();
-  const model = buildModel(cfg);
+  const cfg = configFor(providerId);
+  if (cfg.envKey && !process.env[cfg.envKey]) {
+    throw new Error(
+      `missing ${cfg.envKey} for "${providerId}" — set it, or press 'm' for a local model (ollama)`,
+    );
+  }
+  const model = buildModel(providerId, cfg);
 
   const system =
     perspective.system +
+    languageInstruction(language) +
     "\nReturn ONLY the JSON object. No markdown, no code fences, no prose.";
 
   const prompt = perspective.buildPrompt(evidence);

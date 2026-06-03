@@ -1,4 +1,6 @@
 // The authors pane: a keyboard-selectable list of contributors in scope.
+// The highlighted row IS the current suspect (live via onChange); nothing runs
+// until the user starts an analysis.
 
 import { useEffect, useRef } from "react";
 import { RGBA, type SelectOption, type SelectRenderable } from "@opentui/core";
@@ -12,10 +14,10 @@ const CURSOR_BG = "#1F2937"; // subtle dark band for the highlighted row
 interface WhoPaneProps {
   focused: boolean;
   authors: AuthorEvidence[];
-  onSelect: (author: AuthorEvidence) => void;
+  onChange: (author: AuthorEvidence) => void;
 }
 
-export function WhoPane({ focused, authors, onSelect }: WhoPaneProps) {
+export function WhoPane({ focused, authors, onChange }: WhoPaneProps) {
   const ref = useRef<SelectRenderable>(null);
   // Imperatively grab keyboard focus so arrow keys move the author cursor.
   useEffect(() => {
@@ -35,12 +37,12 @@ export function WhoPane({ focused, authors, onSelect }: WhoPaneProps) {
 
   return (
     <box
-      title="Who"
+      title="Subject"
       border
       borderColor={focused ? ACCENT : NEUTRAL}
       padding={1}
       overflow="hidden"
-      style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}
+      style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, minHeight: 0 }}
     >
       <select
         ref={ref}
@@ -52,9 +54,9 @@ export function WhoPane({ focused, authors, onSelect }: WhoPaneProps) {
         selectedTextColor={ACCENT}
         showDescription
         style={{ flexGrow: 1 }}
-        onSelect={(index) => {
+        onChange={(index: number) => {
           const picked = authors[index];
-          if (picked) onSelect(picked);
+          if (picked) onChange(picked);
         }}
       />
     </box>

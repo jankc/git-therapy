@@ -1,23 +1,30 @@
-// Async analysis hook: idle -> loading -> done/error.
-// Keyed on a primitive runKey (author email + perspective id) so it re-runs only
-// on real changes. A per-run AbortController + `cancelled` flag make it safe under
-// React StrictMode double-invoke and rapid author/perspective switching (an older
-// slow call can never clobber a newer one).
+// Manual analysis hook: idle -> loading -> done/error.
+// Nothing runs until the user starts a run: the App passes an AnalysisRequest
+// snapshot whose `id` bumps on each start. The hook keys off that `id`, so
+// merely changing the selection (author/lens/model/language) never triggers a run
+// — only an explicit start does. A per-run AbortController + `cancelled` flag keep
+// it safe under React StrictMode double-invoke and rapid restarts.
 
 import { useEffect, useState } from "react";
-import { generateAnalysis } from "./ai";
+import { generateAnalysis, type Language, type ProviderId } from "./ai";
 import type { Perspective } from "./perspectives";
 import type { AnalysisState, AuthorEvidence } from "./types";
 
-export function useAnalysis(
-  evidence: AuthorEvidence | null,
-  perspective: Perspective,
-): AnalysisState {
+export interface AnalysisRequest {
+  /** Bumped on every start so re-running the same config still fires. */
+  id: number;
+  evidence: AuthorEvidence;
+  perspective: Perspective;
+  providerId: ProviderId;
+  language: Language;
+}
+
+export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
   const [state, setState] = useState<AnalysisState>({ status: "idle" });
-  const runKey = evidence ? `${evidence.author.email}::${perspective.id}` : null;
+  const runId = request?.id ?? null;
 
   useEffect(() => {
-    if (!evidence || !runKey) {
+    if (!request) {
       setState({ status: "idle" });
       return;
     }
@@ -25,7 +32,7 @@ export function useAnalysis(
     const controller = new AbortController();
     let cancelled = false;
     let lastFlush = 0;
-    setState({ status: "loading", approxOutputTokens: 0 });
+    setState({ status: "loading", requestId: request.id, approxOutputTokens: 0 });
 
     // Throttle live token updates to ~10 Hz so streaming doesn't thrash renders.
     const onProgress = (approx: number) => {
@@ -33,24 +40,42 @@ export function useAnalysis(
       const now = performance.now();
       if (now - lastFlush < 100) return;
       lastFlush = now;
-      setState({ status: "loading", approxOutputTokens: approx });
+      setState({ status: "loading", requestId: request.id, approxOutputTokens: approx });
     };
 
-    generateAnalysis(evidence, perspective, controller.signal, onProgress)
+    generateAnalysis(
+      request.evidence,
+      request.perspective,
+      request.providerId,
+      request.language,
+      controller.signal,
+      onProgress,
+    )
       .then(({ value, usage }) => {
-        if (!cancelled) setState({ status: "done", value, usage });
+        if (!cancelled) setState({ status: "done", requestId: request.id, value, usage });
       })
       .catch((err) => {
         if (cancelled || controller.signal.aborted) return;
-        setState({ status: "error", message: err instanceof Error ? err.message : String(err) });
+        setState({
+          status: "error",
+          requestId: request.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
       });
 
     return () => {
       cancelled = true;
       controller.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runKey is the stable identity
-  }, [runKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runId is the stable run identity
+  }, [runId]);
 
   return state;
+}
+
+export function analysisStateMatchesRequest(
+  state: AnalysisState,
+  request: AnalysisRequest | null,
+): boolean {
+  return request !== null && "requestId" in state && state.requestId === request.id;
 }

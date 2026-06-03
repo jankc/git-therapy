@@ -1,4 +1,4 @@
-export const PANE_IDS = ["what", "who", "why"] as const;
+export const PANE_IDS = ["what", "who", "type", "why"] as const;
 
 export type PaneId = (typeof PANE_IDS)[number];
 

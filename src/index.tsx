@@ -3,7 +3,7 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { parseTarget, type Target } from "./args";
-import { assertApiKey, activeModelLabel } from "./ai";
+import { defaultProviderId, modelLabel } from "./ai";
 import { collect } from "./git";
 import { buildAuthorEvidence } from "./evidence";
 import { App } from "./App";
@@ -25,12 +25,6 @@ try {
   fail(err instanceof Error ? err.message : String(err));
 }
 
-try {
-  assertApiKey();
-} catch (err) {
-  fail(err instanceof Error ? err.message : String(err));
-}
-
 let blame, commits, scopeCode;
 try {
   ({ blame, commits, scopeCode } = await collect(target));
@@ -44,7 +38,7 @@ if (blame.length === 0) {
 
 const authors = buildAuthorEvidence(blame, commits, scopeCode);
 
-console.error(`git-therapy: ${authors.length} author(s), model ${activeModelLabel()}`);
+console.error(`git-therapy: ${authors.length} author(s), model ${modelLabel(defaultProviderId())}`);
 
 const renderer = await createCliRenderer();
 

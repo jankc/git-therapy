@@ -6,16 +6,20 @@ describe("focus cycle", () => {
     expect(INITIAL_FOCUSED_PANE_ID).toBe("what");
   });
 
-  test("PANE_IDS equals [what, who, why]", () => {
-    expect(PANE_IDS).toEqual(["what", "who", "why"]);
+  test("PANE_IDS equals [what, who, type, why]", () => {
+    expect(PANE_IDS).toEqual(["what", "who", "type", "why"]);
   });
 
   test("getNextPaneId cycles what -> who", () => {
     expect(getNextPaneId("what")).toBe("who");
   });
 
-  test("getNextPaneId cycles who -> why", () => {
-    expect(getNextPaneId("who")).toBe("why");
+  test("getNextPaneId cycles who -> type", () => {
+    expect(getNextPaneId("who")).toBe("type");
+  });
+
+  test("getNextPaneId cycles type -> why", () => {
+    expect(getNextPaneId("type")).toBe("why");
   });
 
   test("getNextPaneId cycles why -> what", () => {
