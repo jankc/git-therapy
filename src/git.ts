@@ -1,11 +1,12 @@
 // Git I/O — shell out to `git` via Bun.spawn. Thin pass-throughs; the parsing
 // (blame.ts, evidence.ts) is what carries the unit tests.
 
+import { dirname, resolve } from "node:path";
 import type { BlameLine, RawCommit } from "./types";
 import type { Target } from "./args";
 import { parsePorcelainBlame } from "./blame";
 
-async function runGit(args: string[], cwd = process.cwd()): Promise<string> {
+async function runGit(args: string[], cwd: string): Promise<string> {
   const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -18,26 +19,26 @@ async function runGit(args: string[], cwd = process.cwd()): Promise<string> {
   return out;
 }
 
-export async function collectBlame(file: string, range: [number, number] | null): Promise<BlameLine[]> {
+export async function collectBlame(
+  file: string,
+  range: [number, number] | null,
+  cwd: string,
+): Promise<BlameLine[]> {
   const args = ["blame", "--line-porcelain"];
   if (range) args.push("-L", `${range[0]},${range[1]}`);
   args.push("--", file);
-  return parsePorcelainBlame(await runGit(args));
+  return parsePorcelainBlame(await runGit(args, cwd));
 }
 
 const SOH = "\x01";
 
-export async function collectLog(file: string): Promise<RawCommit[]> {
+export async function collectLog(file: string, cwd: string): Promise<RawCommit[]> {
   // SOH-delimited header line per commit, followed by --numstat rows.
   const fmt = `${SOH}%H${SOH}%an${SOH}%ae${SOH}%aI${SOH}%s`;
-  const out = await runGit([
-    "log",
-    "--no-merges",
-    "--numstat",
-    `--pretty=format:${fmt}`,
-    "--",
-    file,
-  ]);
+  const out = await runGit(
+    ["log", "--no-merges", "--numstat", `--pretty=format:${fmt}`, "--", file],
+    cwd,
+  );
 
   const commits: RawCommit[] = [];
   let current: RawCommit | null = null;
@@ -86,10 +87,14 @@ export interface CollectedEvidence {
 
 /** Collect everything for a target in one call. */
 export async function collect(target: Target): Promise<CollectedEvidence> {
+  // Resolve to an absolute path and run git in the file's own directory, so the
+  // target can live in any repo (not just git-therapy's own working tree).
+  const absFile = resolve(target.file);
+  const cwd = dirname(absFile);
   const [blame, commits, scopeCode] = await Promise.all([
-    collectBlame(target.file, target.range),
-    collectLog(target.file),
-    readScopeCode(target.file, target.range),
+    collectBlame(absFile, target.range, cwd),
+    collectLog(absFile, cwd),
+    readScopeCode(absFile, target.range),
   ]);
   return { blame, commits, scopeCode };
 }
