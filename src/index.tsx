@@ -3,19 +3,52 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { parseTarget, type Target } from "./args";
-import { defaultProviderId, modelLabel } from "./ai";
+import { defaultProviderId, modelLabel, PROVIDER_ORDER } from "./ai";
 import { collect } from "./git";
 import { buildAuthorEvidence } from "./evidence";
 import { App } from "./App";
+import pkg from "../package.json";
 
 function fail(message: string): never {
   console.error(`git-therapy: ${message}`);
   process.exit(1);
 }
 
+const HELP = `git-therapy — psychoanalyze a file's authors from its git history
+
+Usage:
+  git-therapy <path>[:<start>-<end>]
+
+Arguments:
+  <path>            a git-tracked file to analyze
+  :<start>-<end>    optional 1-based line range (e.g. src/app.ts:40-80)
+
+Options:
+  -h, --help        show this help and exit
+  -v, --version     show version and exit
+
+Keys (inside the TUI):
+  Tab    move between panes        m    cycle model / provider
+  ↑ / ↓  move the selection        l    toggle language (English / Czech)
+  Enter  run the examination       Esc  cancel a running analysis
+  q      quit
+
+Providers (set GIT_THERAPY_PROVIDER, or switch live with m):
+  ${PROVIDER_ORDER.join(", ")}
+  Defaults to local Ollama; cloud providers need an API key, e.g.
+  KIMI_API_KEY, Z_AI_API_TOKEN, OPENROUTER_API_KEY (deepseek/qwen), GEMINI_API_KEY.`;
+
 const rawArg = process.argv[2];
+if (rawArg === "-h" || rawArg === "--help") {
+  console.log(HELP);
+  process.exit(0);
+}
+if (rawArg === "-v" || rawArg === "--version") {
+  console.log(`git-therapy ${pkg.version}`);
+  process.exit(0);
+}
 if (!rawArg) {
-  fail("usage: git-therapy <path>[:<start>-<end>]");
+  fail("usage: git-therapy <path>[:<start>-<end>]  (try --help)");
 }
 
 let target: Target;
