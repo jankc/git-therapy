@@ -17,6 +17,7 @@ import {
 } from "./ai";
 import {
   analysisStateMatchesRequest,
+  diagnosisKey,
   useAnalysis,
   type AnalysisRequest,
 } from "./useAnalysis";
@@ -53,6 +54,10 @@ export function App({ file, blame, authors }: AppProps) {
   // The snapshot that actually drives a run.
   const [runRequest, setRunRequest] = useState<AnalysisRequest | null>(null);
   const runIdRef = useRef(0);
+
+  // Finished diagnoses, keyed by (author, lens, model, language). Written only on
+  // full completion, so a cancelled or superseded run never clobbers a cached one.
+  const cacheRef = useRef<Map<string, Extract<AnalysisState, { status: "done" }>>>(new Map());
 
   const renderer = useRenderer();
   const { height: terminalHeight } = useTerminalDimensions();
@@ -92,8 +97,10 @@ export function App({ file, blame, authors }: AppProps) {
     ? selectedAuthor.author.name || selectedAuthor.author.email || "(unknown)"
     : null;
 
+  // The spinner only belongs to the current selection: navigating away from a
+  // running combo (fresh -> false) hides it so the new combo's cache can show.
   const activeAnalysis =
-    analysis.status === "loading" && analysisMatchesRun && runRequest
+    analysis.status === "loading" && fresh && runRequest
       ? {
           suspect: runRequest.evidence.author.name || runRequest.evidence.author.email || "(unknown)",
           lens: runRequest.perspective.label,
@@ -101,6 +108,21 @@ export function App({ file, blame, authors }: AppProps) {
           language: runRequest.language,
         }
       : null;
+
+  // A finished diagnosis for the current selection, if one was cached earlier.
+  const cached = selectedAuthor
+    ? cacheRef.current.get(diagnosisKey(selectedAuthor, perspective, providerId, language)) ?? null
+    : null;
+
+  // Prefer the live run while it matches the selection; otherwise fall back to
+  // the cache so a previously analysed combo appears immediately without a run.
+  let displayState: AnalysisState = { status: "idle" };
+  if (fresh && analysis.status !== "idle") {
+    displayState = analysis;
+  } else if (cached) {
+    displayState = cached;
+  }
+  const displayFresh = fresh || cached !== null;
 
   // Restore the terminal (disable mouse tracking, leave alt screen) before exit,
   // otherwise the shell fills with mouse escape gibberish on cursor movement.
@@ -132,8 +154,20 @@ export function App({ file, blame, authors }: AppProps) {
     if (analysis.status === "done" && countedRef.current !== analysis) {
       countedRef.current = analysis;
       setSessionTokens((t) => t + analysis.usage.total);
+      // Cache the finished result under the request that produced it.
+      if (runRequest && analysisMatchesRun) {
+        cacheRef.current.set(
+          diagnosisKey(
+            runRequest.evidence,
+            runRequest.perspective,
+            runRequest.providerId,
+            runRequest.language,
+          ),
+          analysis,
+        );
+      }
     }
-  }, [analysis]);
+  }, [analysis, runRequest, analysisMatchesRun]);
 
   useKeyboard((key) => {
     if (isBareEscapeKey(key) && analysis.status === "loading") {
@@ -189,12 +223,12 @@ export function App({ file, blame, authors }: AppProps) {
       <WhyPane
         focused={focusedPane === "why"}
         perspective={perspective}
-        state={analysis}
+        state={displayState}
         suspect={suspectName}
         model={modelLabel(providerId)}
         language={language}
         activeAnalysis={activeAnalysis}
-        fresh={fresh}
+        fresh={displayFresh}
         sessionTokens={sessionTokens}
       />
     </box>

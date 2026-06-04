@@ -36,7 +36,7 @@ function request(id: number): AnalysisRequest {
     id,
     evidence,
     perspective: PERSPECTIVES[0]!,
-    providerId: "ollama",
+    providerId: "ollama-qwen",
     language: "English",
   };
 }
@@ -45,7 +45,7 @@ describe("analysisStateMatchesRequest", () => {
   test("matches loading, done, and error states by request id", () => {
     expect(
       analysisStateMatchesRequest(
-        { status: "loading", requestId: 1, approxOutputTokens: 0 },
+        { status: "loading", requestId: 1, approxOutputTokens: 0, startedAt: 0 },
         request(1),
       ),
     ).toBe(true);
@@ -56,6 +56,8 @@ describe("analysisStateMatchesRequest", () => {
           requestId: 1,
           value: {},
           usage: { input: 1, output: 1, total: 2 },
+          generatedAt: 0,
+          elapsedMs: 0,
         },
         request(1),
       ),
@@ -76,6 +78,8 @@ describe("analysisStateMatchesRequest", () => {
           requestId: 1,
           value: { sections: [{ heading: "old", body: "old" }] },
           usage: { input: 1, output: 1, total: 2 },
+          generatedAt: 0,
+          elapsedMs: 0,
         },
         request(2),
       ),
@@ -86,7 +90,7 @@ describe("analysisStateMatchesRequest", () => {
     expect(analysisStateMatchesRequest({ status: "idle" }, request(1))).toBe(false);
     expect(
       analysisStateMatchesRequest(
-        { status: "loading", requestId: 1, approxOutputTokens: 0 },
+        { status: "loading", requestId: 1, approxOutputTokens: 0, startedAt: 0 },
         null,
       ),
     ).toBe(false);

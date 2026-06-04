@@ -4,10 +4,16 @@
 // bounded retry). This is provider-agnostic: it does not rely on native
 // `json_schema` support, which Kimi and local Ollama models lack.
 
+import { appendFileSync } from "node:fs";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { streamText } from "ai";
 import type { AuthorEvidence, TokenUsage } from "./types";
 import type { Perspective } from "./perspectives";
+
+// Debug flag: when GIT_THERAPY_OUTGOING_LOG is set to a path, dump the exact
+// outgoing model payload there (opentui swallows console output, so write to
+// disk). Unset = no logging.
+const OUTGOING_LOG = process.env.GIT_THERAPY_OUTGOING_LOG ?? null;
 
 export interface AnalysisResult {
   value: unknown;
@@ -21,17 +27,22 @@ interface ProviderConfig {
 }
 
 const PROVIDERS: Record<string, ProviderConfig> = {
-  ollama: {
+  "ollama-qwen": {
     baseURL: "http://localhost:11434/v1",
     envKey: null,
     model: process.env.OLLAMA_MODEL ?? "qwen3.6:27b-mlx",
   },
-  kimi: {
-    // baseURL: "https://api.moonshot.ai/v1",
-    baseURL: "https://api.kimi.com/coding/v1",
-    envKey: "KIMI_API_KEY",
-    model: process.env.KIMI_MODEL ?? "kimi-k2.6",
+  "ollama-gemma": {
+    baseURL: "http://localhost:11434/v1",
+    envKey: null,
+    model: "gemma4:26b-mlx",
   },
+  // kimi: {
+  //   // baseURL: "https://api.moonshot.ai/v1",
+  //   baseURL: "https://api.kimi.com/coding/v1",
+  //   envKey: "KIMI_API_KEY",
+  //   model: process.env.KIMI_MODEL ?? "kimi-k2.6",
+  // },
   zai: {
     // z.ai GLM via its OpenAI-compatible GLM Coding Plan endpoint (Bearer auth —
     // reuses the same key you use with Claude Code). For a regular pay-as-you-go
@@ -43,29 +54,29 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   deepseek: {
     baseURL: "https://openrouter.ai/api/v1",
     envKey: "OPENROUTER_API_KEY",
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek/deepseek-chat-v3-0324",
+    model: process.env.DEEPSEEK_MODEL ?? "deepseek/deepseek-v4-flash",
   },
   qwen: {
     baseURL: "https://openrouter.ai/api/v1",
     envKey: "OPENROUTER_API_KEY",
-    model: process.env.QWEN_MODEL ?? "qwen/qwen3-235b-a22b",
+    model: process.env.QWEN_MODEL ?? "qwen/qwen3.6-flash",
   },
   gemini: {
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
     envKey: "GEMINI_API_KEY",
-    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
   },
 };
 
 // Cycle order for the in-app model selector ('m' key). The provider is no longer
 // frozen at startup — it is chosen at runtime and threaded into generateAnalysis.
 export const PROVIDER_ORDER = [
-  "ollama",
-  "kimi",
-  "zai",
   "deepseek",
   "qwen",
+  "zai",
   "gemini",
+  "ollama-qwen",
+  "ollama-gemma",
 ] as const;
 export type ProviderId = (typeof PROVIDER_ORDER)[number];
 
@@ -112,7 +123,7 @@ export function defaultProviderId(): ProviderId {
   const env = process.env.GIT_THERAPY_PROVIDER;
   return env && (PROVIDER_ORDER as readonly string[]).includes(env)
     ? (env as ProviderId)
-    : "ollama";
+    : PROVIDER_ORDER[0];
 }
 
 export function modelLabel(id: ProviderId): string {
@@ -213,6 +224,16 @@ export async function generateAnalysis(
     // empty (surfacing only a useless "No output generated" later). Capture the
     // real error here so it can be reported instead.
     let streamError: unknown;
+    // Dump the exact outgoing payload when the debug flag is set. Tail it with
+    // `tail -f <path>`.
+    if (OUTGOING_LOG) {
+      appendFileSync(
+        OUTGOING_LOG,
+        `\n=== → model (${providerId}/${cfg.model}, lens=${perspective.id}, attempt ${attempt + 1}) ===\n` +
+          `--- system ---\n${attemptSystem}\n` +
+          `--- prompt ---\n${prompt}\n=== end ===\n`,
+      );
+    }
     const result = streamText({
       model,
       system: attemptSystem,

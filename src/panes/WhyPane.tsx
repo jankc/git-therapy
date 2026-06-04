@@ -14,8 +14,71 @@ const FG = "#E5E7EB";
 const BAR_WIDTH = 18;
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
+// Cycled through while a run is in flight, in place of a plain "analyzing".
+const LOADING_MESSAGES = [
+  "Projecting…",
+  "Gaslighting…",
+  "Catastrophizing…",
+  "Dissociating…",
+  "Ruminating…",
+  "Pathologizing…",
+  "Overanalyzing…",
+  "Repressing…",
+  "Deflecting…",
+  "Spiraling…",
+  "Intellectualizing…",
+  "Internalizing…",
+  "Rationalizing…",
+  "Splitting…",
+  "Suppressing…",
+  "Diagnosing…",
+  "Perseverating…",
+  "Hyperventilating…",
+  "Somatizing…",
+  "Fixating…",
+  "Detaching…",
+  "Regressing…",
+  "Sublimating…",
+  "Avoidizing…",
+  "Transferenceing…",
+  "Hypochondriating…",
+  "Neuroticking…",
+  "Cope-maxxing…",
+  "Triangulating…",
+  "Decompensating…",
+  "Externalizing…",
+  "Mentalizing…",
+  "Catharsizing…",
+  "Reframing…",
+  "Enmeshing…",
+  "Idealizing…",
+  "Devaluing…",
+  "Compartmentalizing…",
+  "Trauma-dumping…",
+  "Self-soothing…",
+  "Boundary-setting…",
+  "Co-ruminating…",
+  "Doom-scrolling…",
+  "Inner-childing…",
+  "Shadow-working…",
+  "Attachment-styling…",
+  "Ego-deathing…",
+  "Vibe-checking…",
+];
+
 function fmtTokens(n: number): string {
   return n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+function fmtTime(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function fmtElapsed(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
 }
 
 interface ActiveAnalysis {
@@ -25,22 +88,41 @@ interface ActiveAnalysis {
   language: Language;
 }
 
-function Spinner({ analysis, tokens }: { analysis: ActiveAnalysis; tokens: number }) {
+function Spinner({
+  analysis,
+  tokens,
+  startedAt,
+}: {
+  analysis: ActiveAnalysis;
+  tokens: number;
+  startedAt: number;
+}) {
   const [frame, setFrame] = useState(0);
-  const [secs, setSecs] = useState(0);
+  // Derive elapsed seconds from the absolute start time so it stays correct
+  // across remounts (switching lens away and back) instead of resetting to 0.
+  const [secs, setSecs] = useState(() => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+  // The message advances roughly every 5s; seed from startedAt so a fresh run
+  // doesn't always open on the same word.
+  const [msgIndex, setMsgIndex] = useState(() => Math.floor(startedAt / 5000));
   useEffect(() => {
     const tick = setInterval(() => setFrame((f) => f + 1), 100);
-    const clock = setInterval(() => setSecs((s) => s + 1), 1000);
+    const clock = setInterval(
+      () => setSecs(Math.max(0, Math.floor((Date.now() - startedAt) / 1000))),
+      1000,
+    );
+    const cycle = setInterval(() => setMsgIndex((i) => i + 1), 5000);
     return () => {
       clearInterval(tick);
       clearInterval(clock);
+      clearInterval(cycle);
     };
-  }, []);
+  }, [startedAt]);
   const glyph = SPINNER[frame % SPINNER.length] ?? "⠋";
+  const message = LOADING_MESSAGES[msgIndex % LOADING_MESSAGES.length] ?? "Analyzing…";
   return (
     <box flexDirection="column">
       <text fg={ACCENT}>
-        {glyph} analyzing <span fg={FG}>{analysis.suspect}</span>
+        {glyph} {message} <span fg={FG}>{analysis.suspect}</span>
       </text>
       <text fg={DIM}>
         {analysis.lens} · {analysis.model} · {analysis.language}
@@ -176,7 +258,7 @@ export function WhyPane({
   let footer = "";
   if (state.status === "loading" && activeAnalysis) {
     const tokens = state.approxOutputTokens;
-    body = <Spinner analysis={activeAnalysis} tokens={tokens} />;
+    body = <Spinner analysis={activeAnalysis} tokens={tokens} startedAt={state.startedAt} />;
     footer = `${activeAnalysis.lens} · Esc cancel · ~${fmtTokens(tokens)} tok…`;
   } else if (!suspect) {
     body = <text attributes={TextAttributes.DIM}>Select a suspect from the Who pane.</text>;
@@ -189,7 +271,7 @@ export function WhyPane({
       ) : (
         <NarrativeView result={state.value as NarrativeResult} />
       );
-    footer = `${state.usage.output} out · ${fmtTokens(state.usage.total)} tok · session ${fmtTokens(sessionTokens)}`;
+    footer = `${state.usage.output} out · ${fmtTokens(state.usage.total)} tok · session ${fmtTokens(sessionTokens)} · ${fmtTime(state.generatedAt)} · ${fmtElapsed(state.elapsedMs)}`;
   } else {
     body = (
       <ReadyView suspect={suspect} lens={perspective.label} model={model} language={language} />

@@ -32,7 +32,10 @@ export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
     const controller = new AbortController();
     let cancelled = false;
     let lastFlush = 0;
-    setState({ status: "loading", requestId: request.id, approxOutputTokens: 0 });
+    // Absolute start time so the spinner's elapsed clock survives remounts (e.g.
+    // navigating away from the running lens and back) instead of restarting at 0.
+    const startedAt = Date.now();
+    setState({ status: "loading", requestId: request.id, approxOutputTokens: 0, startedAt });
 
     // Throttle live token updates to ~10 Hz so streaming doesn't thrash renders.
     const onProgress = (approx: number) => {
@@ -40,7 +43,7 @@ export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
       const now = performance.now();
       if (now - lastFlush < 100) return;
       lastFlush = now;
-      setState({ status: "loading", requestId: request.id, approxOutputTokens: approx });
+      setState({ status: "loading", requestId: request.id, approxOutputTokens: approx, startedAt });
     };
 
     generateAnalysis(
@@ -52,7 +55,17 @@ export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
       onProgress,
     )
       .then(({ value, usage }) => {
-        if (!cancelled) setState({ status: "done", requestId: request.id, value, usage });
+        if (!cancelled) {
+          const finishedAt = Date.now();
+          setState({
+            status: "done",
+            requestId: request.id,
+            value,
+            usage,
+            generatedAt: finishedAt,
+            elapsedMs: finishedAt - startedAt,
+          });
+        }
       })
       .catch((err) => {
         if (cancelled || controller.signal.aborted) return;
@@ -78,4 +91,17 @@ export function analysisStateMatchesRequest(
   request: AnalysisRequest | null,
 ): boolean {
   return request !== null && "requestId" in state && state.requestId === request.id;
+}
+
+/**
+ * Cache key for a finished diagnosis. Every field changes the LLM output, so a
+ * distinct (author, lens, model, language) combination is a distinct cache entry.
+ */
+export function diagnosisKey(
+  evidence: AuthorEvidence,
+  perspective: Perspective,
+  providerId: ProviderId,
+  language: Language,
+): string {
+  return `${evidence.author.email}|${perspective.id}|${providerId}|${language}`;
 }

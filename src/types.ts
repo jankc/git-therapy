@@ -76,6 +76,13 @@ export interface TokenUsage {
 /** Result of analysis — async state machine for the Why pane. */
 export type AnalysisState =
   | { status: "idle" }
-  | { status: "loading"; requestId: number; approxOutputTokens: number }
-  | { status: "done"; requestId: number; value: unknown; usage: TokenUsage }
+  | { status: "loading"; requestId: number; approxOutputTokens: number; startedAt: number }
+  | {
+      status: "done";
+      requestId: number;
+      value: unknown;
+      usage: TokenUsage;
+      generatedAt: number;
+      elapsedMs: number;
+    }
   | { status: "error"; requestId: number; message: string };
