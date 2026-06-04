@@ -6,6 +6,9 @@ import {
   type AnalysisRequest,
 } from "./useAnalysis";
 
+const ZERO_CODE_SCAN = { todos: 0, fixmes: 0, hacks: 0, exclamations: 0, allCapsTokens: 0, magicNumbers: 0, maxNestingDepth: 0, maxLineLength: 0, profanity: 0 };
+const ZERO_DERIVED = { sessionCount: 0, longestSessionMinutes: 0, longestSessionCommits: 0, latestEndingHourLocal: 0, avgCommitsPerSession: 0, nightOwlRatio: 0, weekendRatio: 0, fixupChainCount: 0, fixupCommitCount: 0, oldestLineAgeDays: 0, newestLineAgeDays: 0, codeScan: ZERO_CODE_SCAN };
+
 const evidence: AuthorEvidence = {
   author: { name: "Ada", email: "ada@example.com" },
   linesAuthored: 1,
@@ -18,6 +21,7 @@ const evidence: AuthorEvidence = {
       authorTz: "+0000",
       summary: "initial",
       code: "const x = 1;",
+      ageDays: 0,
     },
   ],
   blamedCommits: [],
@@ -29,6 +33,7 @@ const evidence: AuthorEvidence = {
     timeSpanDays: 0,
   },
   scopeCode: "1: const x = 1;",
+  derived: ZERO_DERIVED,
 };
 
 function request(id: number): AnalysisRequest {

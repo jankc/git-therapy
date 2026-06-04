@@ -18,6 +18,9 @@ const blame: BlameLine[] = [
   },
 ];
 
+const ZERO_CODE_SCAN = { todos: 0, fixmes: 0, hacks: 0, exclamations: 0, allCapsTokens: 0, magicNumbers: 0, maxNestingDepth: 0, maxLineLength: 0, profanity: 0 };
+const ZERO_DERIVED = { sessionCount: 0, longestSessionMinutes: 0, longestSessionCommits: 0, latestEndingHourLocal: 0, avgCommitsPerSession: 0, nightOwlRatio: 0, weekendRatio: 0, fixupChainCount: 0, fixupCommitCount: 0, oldestLineAgeDays: 0, newestLineAgeDays: 0, codeScan: ZERO_CODE_SCAN };
+
 function author(name: string, linesAuthored: number): AuthorEvidence {
   return {
     author: { name, email: `${name.toLowerCase()}@example.com` },
@@ -31,6 +34,7 @@ function author(name: string, linesAuthored: number): AuthorEvidence {
         authorTz: "+0000",
         summary: "initial",
         code: "const x = 1;",
+        ageDays: 0,
       },
     ],
     blamedCommits: [],
@@ -42,6 +46,7 @@ function author(name: string, linesAuthored: number): AuthorEvidence {
       timeSpanDays: 0,
     },
     scopeCode: "1: const x = 1;",
+    derived: ZERO_DERIVED,
   };
 }
 
@@ -64,7 +69,15 @@ async function renderRows(height: number, tabCount = 0): Promise<string[]> {
   try {
     act(() => {
       root = createRoot(setup.renderer);
-      root.render(<App file="src/App.tsx" blame={blame} authors={authors} />);
+      root.render(
+        <App
+          file="src/App.tsx"
+          blame={blame}
+          authors={authors}
+          initialSelection={{ providerId: "ollama", model: "test-model" }}
+          initialLanguage="English"
+        />,
+      );
     });
     await setup.renderOnce();
     for (let i = 0; i < tabCount; i++) {

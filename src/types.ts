@@ -37,6 +37,7 @@ export interface BlamedLineEvidence {
   authorTz: string; // e.g. "+0200"
   summary: string; // blame summary for the line
   code: string;
+  ageDays: number; // days from authorTime to the captured reference time (one decimal)
 }
 
 export interface EvidenceCommit {
@@ -44,11 +45,51 @@ export interface EvidenceCommit {
   timestamp: string; // ISO
   weekday: string; // "Monday"…
   hourLocal: number; // 0-23, from the commit's own offset
+  minuteLocal: number; // 0-59, from the commit's own offset
   message: string;
   additions: number;
   deletions: number;
-  isAmend: boolean;
+  isAmend: boolean; // heuristic: same identity, later committer date
   minutesSincePrevious: number | null;
+  committerDiverged: boolean; // committer identity differs from author
+  landDelayMinutes: number | null; // committerDate − authorDate in whole minutes; null on parse error
+  isFixup: boolean; // subject matches fixup wording
+  subjectChurnMismatch: "trivial-large" | "sweeping-tiny" | null; // subject ↔ churn contradiction
+}
+
+/** Precomputed behavioral aggregates over an author's blame evidence. */
+export interface DerivedSignals {
+  // Session clustering
+  sessionCount: number; // number of distinct coding sessions
+  longestSessionMinutes: number; // duration of the longest session
+  longestSessionCommits: number; // commit count in the longest session
+  latestEndingHourLocal: number; // local hour of the last commit of the latest-ending session
+  avgCommitsPerSession: number; // mean commits per session
+
+  // Temporal ratios
+  nightOwlRatio: number; // share of commits in 22:00–04:59 local, [0, 1]
+  weekendRatio: number; // share of commits on Sat/Sun, [0, 1]
+
+  // Fixup chains
+  fixupChainCount: number; // maximal consecutive fixup runs of length ≥ 2
+  fixupCommitCount: number; // total fixup-worded commits
+
+  // Line age
+  oldestLineAgeDays: number; // age of the oldest currently blamed line
+  newestLineAgeDays: number; // age of the newest currently blamed line
+
+  // In-code scan
+  codeScan: {
+    todos: number;
+    fixmes: number;
+    hacks: number;
+    exclamations: number; // ! not part of !=
+    allCapsTokens: number; // tokens of ≥ 3 consecutive uppercase letters
+    magicNumbers: number; // numeric literals other than 0/1/-1
+    maxNestingDepth: number; // maximum leading-indent depth across blamed lines
+    maxLineLength: number; // longest blamed line in characters
+    profanity: number; // conservative profanity wordlist match count
+  };
 }
 
 export interface AuthorBaseline {
@@ -71,6 +112,8 @@ export interface AuthorEvidence {
   /** Broader author-in-this-file pattern data. Background context only. */
   authorBaseline: AuthorBaseline;
   scopeCode: string; // the scoped lines, with line numbers
+  /** Precomputed behavioral aggregates. Cited by lenses from Phase 4 onward. */
+  derived: DerivedSignals;
 }
 
 /** Token spend for one analysis call (summed across any retries). */

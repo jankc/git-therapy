@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { getPerspective, MetricsSchema, NarrativeSchema, PERSPECTIVES } from "./perspectives";
 import type { AuthorEvidence } from "./types";
 
+const ZERO_CODE_SCAN = { todos: 0, fixmes: 0, hacks: 0, exclamations: 0, allCapsTokens: 0, magicNumbers: 0, maxNestingDepth: 0, maxLineLength: 0, profanity: 0 };
+const ZERO_DERIVED = { sessionCount: 0, longestSessionMinutes: 0, longestSessionCommits: 0, latestEndingHourLocal: 0, avgCommitsPerSession: 0, nightOwlRatio: 0, weekendRatio: 0, fixupChainCount: 0, fixupCommitCount: 0, oldestLineAgeDays: 0, newestLineAgeDays: 0, codeScan: ZERO_CODE_SCAN };
+
 const EVIDENCE: AuthorEvidence = {
   author: { name: "Jane", email: "jane@x.com" },
   linesAuthored: 3,
@@ -14,6 +17,7 @@ const EVIDENCE: AuthorEvidence = {
       authorTz: "+0000",
       summary: "initial",
       code: "const x = 1;",
+      ageDays: 0,
     },
   ],
   blamedCommits: [],
@@ -25,6 +29,7 @@ const EVIDENCE: AuthorEvidence = {
     timeSpanDays: 0,
   },
   scopeCode: "1: const x = 1;",
+  derived: ZERO_DERIVED,
 };
 
 describe("perspective registry", () => {
