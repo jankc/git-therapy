@@ -39,3 +39,78 @@ export function parseTarget(arg: string): Target {
 
   return { file, range: [start, end] };
 }
+
+// --- Full command-line parsing (subcommands + flags + target) -----------------
+
+export type Invocation =
+  | { mode: "help" }
+  | { mode: "version" }
+  | { mode: "config"; init: boolean }
+  | { mode: "providers" }
+  | {
+      mode: "analyze";
+      target: Target;
+      provider?: string;
+      model?: string;
+      language?: string;
+    };
+
+const FLAGS_WITH_VALUE: Record<string, "provider" | "model" | "language"> = {
+  "--provider": "provider",
+  "-p": "provider",
+  "--model": "model",
+  "--lang": "language",
+  "--language": "language",
+};
+
+/**
+ * Parse the whole argv tail (everything after the program name). Recognizes the
+ * `config` / `providers` subcommands, `-h/--help` and `-v/--version`, the
+ * value flags `--provider`/`--model`/`--lang`, and a single positional target.
+ * Throws on unknown flags or a missing flag value rather than silently ignoring.
+ */
+export function parseInvocation(argv: string[]): Invocation {
+  if (argv[0] === "config") {
+    const rest = argv.slice(1);
+    const init = rest.includes("init");
+    const unknown = rest.find((a) => a !== "init");
+    if (unknown) throw new Error(`unknown argument for "config": ${unknown}`);
+    return { mode: "config", init };
+  }
+  if (argv[0] === "providers") {
+    if (argv.length > 1) throw new Error(`unexpected argument: ${argv[1]}`);
+    return { mode: "providers" };
+  }
+
+  let target: Target | null = null;
+  const flags: { provider?: string; model?: string; language?: string } = {};
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === "-h" || arg === "--help") return { mode: "help" };
+    if (arg === "-v" || arg === "--version") return { mode: "version" };
+
+    const key = FLAGS_WITH_VALUE[arg];
+    if (key) {
+      const value = argv[++i];
+      if (value === undefined) throw new Error(`${arg} requires a value`);
+      flags[key] = value;
+      continue;
+    }
+    // Support `--flag=value` too.
+    const eq = arg.match(/^(--[a-z]+)=(.*)$/);
+    if (eq && FLAGS_WITH_VALUE[eq[1]!]) {
+      flags[FLAGS_WITH_VALUE[eq[1]!]!] = eq[2]!;
+      continue;
+    }
+    if (arg.startsWith("-")) throw new Error(`unknown option: ${arg}`);
+
+    if (target !== null) throw new Error(`unexpected extra argument: ${arg}`);
+    target = parseTarget(arg);
+  }
+
+  if (!target) {
+    throw new Error("no file path provided. Usage: git-therapy <path>[:<start>-<end>]  (try --help)");
+  }
+  return { mode: "analyze", target, ...flags };
+}

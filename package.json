@@ -4,6 +4,9 @@
   "module": "src/index.tsx",
   "type": "module",
   "private": true,
+  "bin": {
+    "git-therapy": "src/index.tsx"
+  },
   "scripts": {
     "start": "bun run src/index.tsx",
     "dev": "bun run --watch src/index.tsx",

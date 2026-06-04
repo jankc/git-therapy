@@ -9,7 +9,6 @@ import { getPerspective } from "./perspectives";
 import {
   cycleModel,
   cycleProvider,
-  defaultSelection,
   LANGUAGES,
   listProviders,
   modelLabel,
@@ -35,6 +34,10 @@ export interface AppProps {
   file: string;
   blame: BlameLine[];
   authors: AuthorEvidence[];
+  /** Starting (provider, model) — from config/env/flags, resolved in index.tsx. */
+  initialSelection: ModelSelection;
+  /** Starting output language — from config/flags. */
+  initialLanguage: Language;
 }
 
 const COMPACT_CHOICE_ROW_HEIGHT = 6;
@@ -44,13 +47,13 @@ const LOWER_CONTROLS_GAP = 1;
 const LEFT_STACK_GAP = 1;
 const MIN_SYMPTOMS_HEIGHT = 5;
 
-export function App({ file, blame, authors }: AppProps) {
+export function App({ file, blame, authors, initialSelection, initialLanguage }: AppProps) {
   const [focusedPane, setFocusedPane] = useState<PaneId>(INITIAL_FOCUSED_PANE_ID);
   const [perspectiveIndex, setPerspectiveIndex] = useState(0);
   // The current suspect tracks the Who list cursor; default to the top contributor.
   const [selectedAuthor, setSelectedAuthor] = useState<AuthorEvidence | null>(authors[0] ?? null);
-  const [selection, setSelection] = useState<ModelSelection>(defaultSelection());
-  const [language, setLanguage] = useState<Language>("English");
+  const [selection, setSelection] = useState<ModelSelection>(initialSelection);
+  const [language, setLanguage] = useState<Language>(initialLanguage);
 
   // The snapshot that actually drives a run.
   const [runRequest, setRunRequest] = useState<AnalysisRequest | null>(null);

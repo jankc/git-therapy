@@ -37,3 +37,10 @@ can derive and exploit those signals.
 - `src/git.test.ts` *(new)* + `src/__fixtures__/log.numstat.txt` *(new)*.
 - `src/evidence.test.ts` — update the `RawCommit` test factory for the new fields.
 - No runtime/UX change; output is identical until later phases consume the fields.
+
+## Dependencies
+
+- **Order:** Phase 1 of 4 — implement first.
+- **Depends on:** none.
+- **Blocks:** `gt002-enrich-evidence-derived-aggregates`.
+- **Status:** ✅ Implemented — commit `5381034` (`feat: capture commit body, committer, trailers, and rename history`).

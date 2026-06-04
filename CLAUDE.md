@@ -25,6 +25,10 @@ the authors. See `README.md` for the user-facing pitch and the five lenses.
 - `evidence.ts` — aggregate blame+log into per-author `AuthorEvidence` (buckets by email).
 - `ai.ts` — providers (each owns multiple models), model build, streaming analysis,
   JSON extraction + Zod retry. A selection is a `(providerId, model)` pair (`ModelSelection`).
+  Built-in providers are merged with the user config in a lazy, memoized `registry()`;
+  `ProviderId` is a plain `string` (config can introduce new providers).
+- `config.ts` — loads/validates `~/.config/git-therapy/config.json` (Zod) and resolves
+  `apiKey` values (`${VAR}` env refs or literal keys). AI-agnostic; `ai.ts` owns the merge.
 - `perspectives.ts` — the 5 lenses: each its own system prompt + Zod schema.
 - `useAnalysis.ts` — React hook for the analysis lifecycle (idle→loading→done/error).
 - `types.ts` — shared types. `panes/*.tsx` — one component per pane.
@@ -38,10 +42,13 @@ the authors. See `README.md` for the user-facing pitch and the five lenses.
 - **Selection sets intent only.** Changing author/lens/model/language does *not* run the
   model — analysis fires only on Enter (`App.tsx` `startAnalysis`). Results are cached by
   `(author|lens|provider:model|language)` so revisiting a combo is instant.
-- **Providers own multiple models.** `PROVIDERS` in `ai.ts` maps a provider (endpoint +
-  key) to a list of models; the TUI cycles provider with `m` and model with `M` (shift).
-  The startup default is `ollama` (local, no key) so the app runs out of the box — keep it
-  first in `PROVIDER_ORDER` unless you deliberately want a key-required default.
+- **Providers own multiple models.** `BUILTIN_PROVIDERS` in `ai.ts` maps a provider
+  (endpoint + key) to a list of models; the TUI cycles provider with `m` and model with
+  `M` (shift). The user config can extend or add providers (see `config.ts`); the merged
+  set + cycle order come from `registry()`/`providerOrder()`, not a static const.
+  Precedence: built-in defaults < config file < env vars < CLI flags. The startup default
+  is `ollama` (local, no key) so the app runs out of the box — keep it first in
+  `BUILTIN_ORDER` unless you deliberately want a key-required default.
 - **`AuthorEvidence` is a locked contract.** Its shape is fed unchanged to all 5 lenses;
   changing it ripples into `ai.ts` and every schema in `perspectives.ts`. Touch with care.
 

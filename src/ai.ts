@@ -7,6 +7,11 @@
 import { appendFileSync } from "node:fs";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { streamText } from "ai";
+import {
+  loadUserConfig,
+  resolveSecret,
+  type UserProviderConfig,
+} from "./config";
 import type { AuthorEvidence, TokenUsage } from "./types";
 import type { Perspective } from "./perspectives";
 
@@ -21,19 +26,28 @@ export interface AnalysisResult {
 }
 
 // A provider is one endpoint + credential that can serve several models. The
-// model is no longer baked into the provider id: a selection is a (provider,
-// model) pair, cycled in the TUI with 'm' (provider) and 'M' (model).
-interface ProviderConfig {
+// model is not baked into the provider id: a selection is a (provider, model)
+// pair, cycled in the TUI with 'm' (provider) and 'M' (model).
+//
+// The set of providers is the BUILT-IN list below merged with the user's
+// ~/.config/git-therapy/config.json (see config.ts), so a globally-installed
+// binary can add models/providers/keys without editing source.
+
+// How a built-in provider names its key: an env var, or null for keyless ollama.
+interface BuiltinProvider {
   baseURL: string;
-  envKey: string | null; // null = no key needed (ollama)
+  envKey: string | null;
   models: string[]; // non-empty; the first is the provider's default model
 }
 
-const PROVIDERS = {
+const BUILTIN_PROVIDERS = {
   ollama: {
     baseURL: "http://localhost:11434/v1",
     envKey: null,
-    models: [process.env.OLLAMA_MODEL ?? "qwen3.6:27b-mlx", "gemma4:26b-mlx"],
+    // 9B, strong instruction-following + tool use (reliable schema-valid JSON),
+    // 201 languages (so Czech mode works). qwen3.5:4b is the lighter same-family
+    // fallback (reachable with M). Override with OLLAMA_MODEL or the config file.
+    models: [process.env.OLLAMA_MODEL ?? "qwen3.5:9b", "qwen3.5:4b"],
   },
   openrouter: {
     baseURL: "https://openrouter.ai/api/v1",
@@ -56,13 +70,15 @@ const PROVIDERS = {
     envKey: "GEMINI_API_KEY",
     models: [process.env.GEMINI_MODEL ?? "gemini-3.5-flash"],
   },
-} satisfies Record<string, ProviderConfig>;
+} satisfies Record<string, BuiltinProvider>;
 
-// Cycle order for the provider selector ('m' key). Starts on ollama: local, no
-// key required, so the app works out of the box and a missing cloud key never
-// blocks startup. The selection is chosen at runtime and threaded into generateAnalysis.
-export const PROVIDER_ORDER = ["ollama", "openrouter", "zai", "gemini"] as const;
-export type ProviderId = (typeof PROVIDER_ORDER)[number];
+// Default cycle order for the provider selector ('m' key). Starts on ollama:
+// local, no key required, so the app works out of the box. Config-only providers
+// are appended after these unless config gives an explicit `order`.
+const BUILTIN_ORDER = ["ollama", "openrouter", "zai", "gemini"] as const;
+
+// A provider id is just a string now — config can introduce arbitrary ones.
+export type ProviderId = string;
 
 /** A concrete choice: which provider, and which of its models. */
 export interface ModelSelection {
@@ -70,10 +86,28 @@ export interface ModelSelection {
   model: string;
 }
 
+// A fully resolved provider: keys are looked up once (env never changes mid-run).
+interface ProviderConfig {
+  baseURL: string;
+  /** The concrete key, or null when keyless OR required-but-missing (see requiresKey). */
+  apiKey: string | null;
+  requiresKey: boolean;
+  /** What to set when a required key is missing (env var name or `${VAR}`); null if inline/keyless. */
+  keyHint: string | null;
+  models: string[];
+}
+
 // Output language for the analysis ('l' key). The model writes all human-readable
 // text in this language; the JSON keys stay English so schema validation holds.
 export const LANGUAGES = ["English", "Czech"] as const;
 export type Language = (typeof LANGUAGES)[number];
+
+/** Resolve a free-text language name (case-insensitive) to a known Language. */
+export function parseLanguage(input: string): Language {
+  const match = LANGUAGES.find((l) => l.toLowerCase() === input.trim().toLowerCase());
+  if (!match) throw new Error(`unknown language "${input}" — choose: ${LANGUAGES.join(", ")}`);
+  return match;
+}
 
 function languageInstruction(language: Language): string {
   return (
@@ -88,23 +122,152 @@ export interface ProviderInfo {
   models: string[];
   /** true when no key is required (ollama) or the required key is present. */
   hasKey: boolean;
+  /** whether this provider needs a key at all (false for keyless ollama). */
+  requiresKey: boolean;
+  /** where the key comes from: an env var name / `${VAR}`, or null if inline/keyless. */
+  keyHint: string | null;
+}
+
+// --- Registry: built-in providers merged with the user config, built once. ---
+
+interface Registry {
+  providers: Map<ProviderId, ProviderConfig>;
+  order: ProviderId[];
+  defaultProvider: ProviderId;
+  defaultModel: string | null;
+  defaultLanguage: Language;
+}
+
+function resolveBuiltin(b: BuiltinProvider): ProviderConfig {
+  if (!b.envKey) {
+    return { baseURL: b.baseURL, apiKey: null, requiresKey: false, keyHint: null, models: b.models };
+  }
+  return {
+    baseURL: b.baseURL,
+    apiKey: process.env[b.envKey] || null,
+    requiresKey: true,
+    keyHint: b.envKey,
+    models: b.models,
+  };
+}
+
+// Merge one user provider entry onto its built-in base (or null for a new one).
+// Fields present in the file override the base; a brand-new provider must supply
+// at least baseURL + models.
+function applyUserProvider(base: ProviderConfig | null, u: UserProviderConfig): ProviderConfig {
+  const baseURL = u.baseURL ?? base?.baseURL;
+  if (!baseURL) throw new Error("missing baseURL");
+  const models = u.models ?? base?.models;
+  if (!models || models.length === 0) throw new Error("missing models");
+
+  let key = {
+    apiKey: base?.apiKey ?? null,
+    requiresKey: base?.requiresKey ?? false,
+    keyHint: base?.keyHint ?? null,
+  };
+  if (u.apiKey !== undefined) {
+    const s = resolveSecret(u.apiKey);
+    // env outranks config: preserve the already-resolved env key and its hint when present
+    key = {
+      apiKey: base?.apiKey ?? s.value,
+      requiresKey: true,
+      keyHint: base?.apiKey != null ? (base?.keyHint ?? null) : s.hint,
+    };
+  }
+  return { baseURL, models, ...key };
+}
+
+function buildRegistry(): Registry {
+  const user = loadUserConfig();
+
+  const providers = new Map<ProviderId, ProviderConfig>();
+  for (const id of BUILTIN_ORDER) providers.set(id, resolveBuiltin(BUILTIN_PROVIDERS[id]));
+
+  const userIds = user.providers ? Object.keys(user.providers) : [];
+  for (const id of userIds) {
+    try {
+      providers.set(id, applyUserProvider(providers.get(id) ?? null, user.providers![id]!));
+    } catch (err) {
+      throw new Error(`config: provider "${id}": ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  let order: ProviderId[];
+  if (user.order) {
+    for (const id of user.order) {
+      if (!providers.has(id)) throw new Error(`config: order lists unknown provider "${id}"`);
+    }
+    const rest = [...providers.keys()].filter((id) => !user.order!.includes(id));
+    order = [...user.order, ...rest];
+  } else {
+    const extras = userIds.filter((id) => !(BUILTIN_ORDER as readonly string[]).includes(id));
+    order = [...BUILTIN_ORDER, ...extras];
+  }
+
+  // default provider/model: config.default, then GIT_THERAPY_PROVIDER (env wins),
+  // else the first in cycle order.
+  let defaultProvider = order[0]!;
+  let defaultModel: string | null = null;
+  if (user.default) {
+    if (!providers.has(user.default.provider)) {
+      throw new Error(`config: default.provider "${user.default.provider}" is not a known provider`);
+    }
+    defaultProvider = user.default.provider;
+    defaultModel = user.default.model ?? null;
+  }
+  const envProvider = process.env.GIT_THERAPY_PROVIDER?.trim();
+  if (envProvider && providers.has(envProvider)) {
+    defaultProvider = envProvider;
+    defaultModel = null; // fall back to that provider's first model
+  }
+  if (defaultModel && !providers.get(defaultProvider)!.models.includes(defaultModel)) {
+    throw new Error(
+      `config: default.model "${defaultModel}" is not one of provider "${defaultProvider}"'s models`,
+    );
+  }
+
+  const defaultLanguage = user.language ? parseLanguage(user.language) : "English";
+  return { providers, order, defaultProvider, defaultModel, defaultLanguage };
+}
+
+// Built lazily and memoized: a CLI subcommand like `--help` must not pay for (or
+// fail on) config loading, and env is stable for the process lifetime.
+let _registry: Registry | null = null;
+function registry(): Registry {
+  return (_registry ??= buildRegistry());
+}
+
+/** Test-only: drop the memoized registry so the next access re-reads config. */
+export function resetRegistryForTests(): void {
+  _registry = null;
 }
 
 function configFor(id: ProviderId): ProviderConfig {
-  const cfg = PROVIDERS[id];
+  const cfg = registry().providers.get(id);
   if (!cfg) throw new Error(`Unknown provider "${id}".`);
   return cfg;
 }
 
 function keyPresent(cfg: ProviderConfig): boolean {
-  return !cfg.envKey || !!process.env[cfg.envKey];
+  return !cfg.requiresKey || cfg.apiKey !== null;
+}
+
+/** The provider cycle order (built-ins plus any config providers). */
+export function providerOrder(): ProviderId[] {
+  return registry().order;
 }
 
 /** All selectable providers with their models and key availability (for the UI). */
 export function listProviders(): ProviderInfo[] {
-  return PROVIDER_ORDER.map((id) => {
+  return providerOrder().map((id) => {
     const cfg = configFor(id);
-    return { id, models: cfg.models, hasKey: keyPresent(cfg) };
+    return {
+      id,
+      models: cfg.models,
+      hasKey: keyPresent(cfg),
+      requiresKey: cfg.requiresKey,
+      keyHint: cfg.keyHint,
+    };
   });
 }
 
@@ -114,24 +277,49 @@ export function selectProvider(id: ProviderId): ModelSelection {
 }
 
 /**
- * The (provider, model) to start on: GIT_THERAPY_PROVIDER if it names a known
- * provider, else the first in PROVIDER_ORDER (ollama — local, no key needed).
- * The model defaults to that provider's first; override per provider with the
- * *_MODEL env vars.
+ * The (provider, model) to start on, honoring config.default and
+ * GIT_THERAPY_PROVIDER (resolved in the registry). The model defaults to that
+ * provider's first unless config.default pins one.
  */
 export function defaultSelection(): ModelSelection {
-  const env = process.env.GIT_THERAPY_PROVIDER;
-  const id =
-    env && (PROVIDER_ORDER as readonly string[]).includes(env)
-      ? (env as ProviderId)
-      : PROVIDER_ORDER[0];
-  return selectProvider(id);
+  const { defaultProvider, defaultModel } = registry();
+  return { providerId: defaultProvider, model: defaultModel ?? configFor(defaultProvider).models[0]! };
+}
+
+/** The language to start in (config.language, else English). */
+export function defaultLanguage(): Language {
+  return registry().defaultLanguage;
+}
+
+/**
+ * Resolve an explicit `--provider` / `--model` CLI override onto the default
+ * selection. Throws with a helpful list when either names something unknown.
+ */
+export function startupSelection(opts: { provider?: string; model?: string }): ModelSelection {
+  let sel = defaultSelection();
+  if (opts.provider) {
+    if (!registry().providers.has(opts.provider)) {
+      throw new Error(`unknown provider "${opts.provider}" — known: ${providerOrder().join(", ")}`);
+    }
+    sel = selectProvider(opts.provider);
+  }
+  if (opts.model) {
+    const models = configFor(sel.providerId).models;
+    if (!models.includes(opts.model)) {
+      throw new Error(
+        `provider "${sel.providerId}" has no model "${opts.model}" — known: ${models.join(", ")} (add it in your config)`,
+      );
+    }
+    sel = { ...sel, model: opts.model };
+  }
+  return sel;
 }
 
 /** Next provider in cycle order (wraps), landing on its default model. */
 export function cycleProvider(current: ModelSelection): ModelSelection {
-  const i = PROVIDER_ORDER.indexOf(current.providerId);
-  return selectProvider(PROVIDER_ORDER[(i + 1) % PROVIDER_ORDER.length]!);
+  const order = providerOrder();
+  const i = order.indexOf(current.providerId);
+  return selectProvider(order[(i + 1) % order.length]!);
 }
 
 /** Next model within the current provider (wraps); provider unchanged. */
@@ -150,7 +338,8 @@ function buildModel(selection: ModelSelection, cfg: ProviderConfig) {
   const openai = createOpenAICompatible({
     name: selection.providerId,
     baseURL: cfg.baseURL,
-    apiKey: cfg.envKey ? process.env[cfg.envKey]! : "ollama",
+    // A keyless endpoint still wants *some* bearer; send a harmless placeholder.
+    apiKey: cfg.apiKey ?? "no-key",
     includeUsage: true, // request token usage in streaming responses
   });
   return openai(selection.model);
@@ -213,17 +402,24 @@ export async function generateAnalysis(
   onProgress?: (approxOutputTokens: number) => void,
 ): Promise<AnalysisResult> {
   const cfg = configFor(selection.providerId);
-  if (cfg.envKey && !process.env[cfg.envKey]) {
+  if (cfg.requiresKey && cfg.apiKey === null) {
+    const what = cfg.keyHint ? `set ${cfg.keyHint}` : "configure a key";
     throw new Error(
-      `missing ${cfg.envKey} for "${selection.providerId}" — set it, or press 'm' for a local model (ollama)`,
+      `missing key for "${selection.providerId}" — ${what}, or press 'm' for a local model (ollama)`,
     );
   }
   const model = buildModel(selection, cfg);
 
+  // Qwen3-family models reason by default; for strict JSON-only output that
+  // preamble just wastes tokens and risks polluting the parse. `/no_think` is
+  // Qwen's soft switch to turn it off — scoped to qwen3* so it never confuses a
+  // model that doesn't understand the directive.
+  const noThink = /qwen3/i.test(selection.model) ? " /no_think" : "";
   const system =
     perspective.system +
     languageInstruction(language) +
-    "\nReturn ONLY the JSON object. No markdown, no code fences, no prose.";
+    "\nReturn ONLY the JSON object. No markdown, no code fences, no prose." +
+    noThink;
 
   const prompt = perspective.buildPrompt(evidence);
   let lastErr: unknown;

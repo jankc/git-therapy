@@ -40,6 +40,8 @@ export interface Perspective {
   buildPrompt: (e: AuthorEvidence) => string;
 }
 
+type ComparisonMetric = Exclude<keyof AuthorEvidence["relativeToFile"], "authorCount">;
+
 // The 5-rule contract shared by every perspective.
 const PERSONA =
   "You are a forensic analyst of software-engineering behavior — calm, clinical, " +
@@ -55,13 +57,21 @@ const PERSONA =
 function metricsInstruction(metricNames: string[]): string {
   return (
     `${PERSONA}\n\n` +
-    `Produce these metrics, each 0-100 with an "evidence" string citing the data: ` +
-    `${metricNames.join(", ")}. Also include up to 5 short "notes". ` +
+    `Produce these metrics, each 0-100 with an "evidence" string that quotes a concrete datum ` +
+    `from the supplied git data (sha, line number, weekday/hour, word-frequency token, or derived/comparative figure): ` +
+    `${metricNames.join(", ")}. Scale anchors: 0 means no supporting evidence, ~50 means weak or ambiguous evidence, ` +
+    `and 90+ means multiple converging signals. Any value above 75 requires at least two distinct cited data points; ` +
+    `lower the value when only one weak signal exists. Sparse evidence (few owned lines or few blamed commits) must ` +
+    `yield low scores plus an explicit thin-evidence note. If evidence contradicts a metric's premise, score it low ` +
+    `and note the contradiction instead of inventing support. ` +
+    `Illustrative example only, not data about the analyzed author: ` +
+    `{"name":"Stress level","value":32,"evidence":"Low: line 12 sha abc1234 and nightOwlRatio=0 provide no second high-stress signal"}. ` +
+    `Also include up to 5 short "notes". ` +
     `Shape: { "author": string, "metrics": [{ "name": string, "value": number, "evidence": string }], "notes": string[] }.`
   );
 }
 
-function evidenceBlock(e: AuthorEvidence): string {
+function coreEvidence(e: AuthorEvidence): string {
   return (
     `AUTHOR: ${e.author.name} <${e.author.email}>\n` +
     `LINES AUTHORED: ${e.linesAuthored} (ranges ${JSON.stringify(e.lineRanges)})\n` +
@@ -69,6 +79,174 @@ function evidenceBlock(e: AuthorEvidence): string {
     `PRIMARY EVIDENCE — BLAMED COMMITS: ${JSON.stringify(e.blamedCommits)}\n` +
     `BACKGROUND ONLY — AUTHOR BASELINE: ${JSON.stringify(e.authorBaseline)}\n` +
     `SURROUNDING SOURCE CONTEXT — SCOPE CODE:\n${e.scopeCode}`
+  );
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function comparativeStanding(e: AuthorEvidence, metrics: ComparisonMetric[]): string {
+  if (e.relativeToFile.authorCount === 1) {
+    return (
+      `COMPARATIVE STANDING: ${e.author.name} is the sole author of this file; ` +
+      `do not treat rank-1-of-1 as a peer comparison.`
+    );
+  }
+
+  const standings = metrics.map((metric) => {
+    const stat = e.relativeToFile[metric];
+    const percentile = `${formatNumber(stat.percentile * 100)}%`;
+
+    return (
+      `${metric}: value ${formatNumber(stat.value)}, file median ${formatNumber(stat.median)}, ` +
+      `ratioToMedian ${formatNumber(stat.ratioToMedian)}, rank ${stat.rank}/${e.relativeToFile.authorCount}, ` +
+      `percentile ${percentile}`
+    );
+  });
+
+  return `COMPARATIVE STANDING: ${standings.join("; ")}`;
+}
+
+function mentalEvidence(e: AuthorEvidence): string {
+  return (
+    `${coreEvidence(e)}\n` +
+    `MENTAL-LENS DERIVED SIGNALS — sessions/night-owl/profanity/intensity: ${JSON.stringify({
+      sessionCount: e.derived.sessionCount,
+      longestSessionMinutes: e.derived.longestSessionMinutes,
+      longestSessionCommits: e.derived.longestSessionCommits,
+      latestEndingHourLocal: e.derived.latestEndingHourLocal,
+      avgCommitsPerSession: e.derived.avgCommitsPerSession,
+      nightOwlRatio: e.derived.nightOwlRatio,
+      fixupChainCount: e.derived.fixupChainCount,
+      fixupCommitCount: e.derived.fixupCommitCount,
+      codeIntensity: {
+        todos: e.derived.codeScan.todos,
+        fixmes: e.derived.codeScan.fixmes,
+        hacks: e.derived.codeScan.hacks,
+        exclamations: e.derived.codeScan.exclamations,
+        allCapsTokens: e.derived.codeScan.allCapsTokens,
+        profanity: e.derived.codeScan.profanity,
+      },
+    })}\n` +
+    `${comparativeStanding(e, [
+      "nightOwlRatio",
+      "avgCommitsPerSession",
+      "longestSessionMinutes",
+      "fixupCommitCount",
+    ])}`
+  );
+}
+
+function skillEvidence(e: AuthorEvidence): string {
+  return (
+    `${coreEvidence(e)}\n` +
+    `SKILL-LENS DERIVED SIGNALS — code shape/age/fixups: ${JSON.stringify({
+      oldestLineAgeDays: e.derived.oldestLineAgeDays,
+      newestLineAgeDays: e.derived.newestLineAgeDays,
+      avgCommitsPerSession: e.derived.avgCommitsPerSession,
+      fixupChainCount: e.derived.fixupChainCount,
+      fixupCommitCount: e.derived.fixupCommitCount,
+      codeScan: {
+        todos: e.derived.codeScan.todos,
+        fixmes: e.derived.codeScan.fixmes,
+        hacks: e.derived.codeScan.hacks,
+        magicNumbers: e.derived.codeScan.magicNumbers,
+        maxNestingDepth: e.derived.codeScan.maxNestingDepth,
+        maxLineLength: e.derived.codeScan.maxLineLength,
+      },
+    })}\n` +
+    `${comparativeStanding(e, [
+      "linesAuthored",
+      "totalFileCommits",
+      "avgMessageLength",
+      "churnPerCommit",
+      "fixupCommitCount",
+    ])}`
+  );
+}
+
+function contextEvidence(e: AuthorEvidence): string {
+  return (
+    `${coreEvidence(e)}\n` +
+    `CONTEXT-LENS DERIVED SIGNALS — committer divergence/weekend ratio/land-delay/commit body: ${JSON.stringify({
+      weekendRatio: e.derived.weekendRatio,
+      totalFileCommits: e.authorBaseline.totalFileCommits,
+      avgMessageLength: e.authorBaseline.avgMessageLength,
+      wordFrequencies: e.authorBaseline.wordFrequencies,
+      blamedCommitProvenance: e.blamedCommits.map((commit) => ({
+        sha: commit.sha,
+        weekday: commit.weekday,
+        hourLocal: commit.hourLocal,
+        minuteLocal: commit.minuteLocal,
+        message: commit.message,
+        additions: commit.additions,
+        deletions: commit.deletions,
+        committerDiverged: commit.committerDiverged,
+        landDelayMinutes: commit.landDelayMinutes,
+        isAmend: commit.isAmend,
+        subjectChurnMismatch: commit.subjectChurnMismatch,
+      })),
+      commitBodyNote: "No separate commit-body field is present in AuthorEvidence; do not invent body text.",
+    })}\n` +
+    `${comparativeStanding(e, [
+      "weekendRatio",
+      "avgMessageLength",
+      "totalFileCommits",
+      "churnPerCommit",
+    ])}`
+  );
+}
+
+function hiddenEvidence(e: AuthorEvidence): string {
+  return (
+    `${coreEvidence(e)}\n` +
+    `NARRATIVE-LENS SIGNALS — age/fixups/tokens/comparison: ${JSON.stringify({
+      oldestLineAgeDays: e.derived.oldestLineAgeDays,
+      newestLineAgeDays: e.derived.newestLineAgeDays,
+      fixupChainCount: e.derived.fixupChainCount,
+      fixupCommitCount: e.derived.fixupCommitCount,
+      codeScan: e.derived.codeScan,
+      wordFrequencies: e.authorBaseline.wordFrequencies,
+    })}\n` +
+    `${comparativeStanding(e, [
+      "linesAuthored",
+      "totalFileCommits",
+      "avgMessageLength",
+      "churnPerCommit",
+    ])}`
+  );
+}
+
+function ghostwriterEvidence(e: AuthorEvidence): string {
+  return (
+    `${coreEvidence(e)}\n` +
+    `GHOSTWRITER-LENS DERIVED SIGNALS — naming/uniformity and AI-assist trailer evidence: ${JSON.stringify({
+      namingAndUniformity: {
+        allCapsTokens: e.derived.codeScan.allCapsTokens,
+        magicNumbers: e.derived.codeScan.magicNumbers,
+        maxNestingDepth: e.derived.codeScan.maxNestingDepth,
+        maxLineLength: e.derived.codeScan.maxLineLength,
+        todos: e.derived.codeScan.todos,
+        fixmes: e.derived.codeScan.fixmes,
+        hacks: e.derived.codeScan.hacks,
+      },
+      commitPolish: e.blamedCommits.map((commit) => ({
+        sha: commit.sha,
+        message: commit.message,
+        additions: commit.additions,
+        deletions: commit.deletions,
+        subjectChurnMismatch: commit.subjectChurnMismatch,
+      })),
+      aiAssistTrailerNote:
+        "No AI-assist trailer list is present in AuthorEvidence; only cite assistant/bot tokens if they appear in supplied messages or code.",
+    })}\n` +
+    `${comparativeStanding(e, [
+      "linesAuthored",
+      "avgMessageLength",
+      "totalFileCommits",
+      "churnPerCommit",
+    ])}`
   );
 }
 
@@ -87,7 +265,7 @@ export const PERSPECTIVES: Perspective[] = [
       "Confidence",
     ]),
     buildPrompt: (e) =>
-      `Infer this author's mental and emotional state while writing this code.\n\n${evidenceBlock(e)}`,
+      `Infer this author's mental and emotional state while writing this code.\n\n${mentalEvidence(e)}`,
   },
   {
     id: "skill",
@@ -102,7 +280,7 @@ export const PERSPECTIVES: Perspective[] = [
       "Understanding-vs-passing-tests ratio",
     ]),
     buildPrompt: (e) =>
-      `Estimate this author's skill and experience from the evidence.\n\n${evidenceBlock(e)}`,
+      `Estimate this author's skill and experience from the evidence.\n\n${skillEvidence(e)}`,
   },
   {
     id: "context",
@@ -117,7 +295,7 @@ export const PERSPECTIVES: Perspective[] = [
       "Manager-standing-behind-them score",
     ]),
     buildPrompt: (e) =>
-      `Infer the external circumstances surrounding this author's work.\n\n${evidenceBlock(e)}`,
+      `Infer the external circumstances surrounding this author's work.\n\n${contextEvidence(e)}`,
   },
   {
     id: "hidden",
@@ -129,10 +307,10 @@ export const PERSPECTIVES: Perspective[] = [
       `Produce narrative "sections", each with a "heading" and a "body" paragraph, covering: ` +
       `"The bug being secretly worked around", "The previous author this code is judging", ` +
       `"The age of 'temporary'", "What was deleted from the comment before committing". ` +
-      `Each body MUST cite specific evidence. ` +
+      `Each body MUST quote a concrete datum from the supplied git data. ` +
       `Shape: { "sections": [{ "heading": string, "body": string }] }.`,
     buildPrompt: (e) =>
-      `Reconstruct the hidden narratives behind this author's code.\n\n${evidenceBlock(e)}`,
+      `Reconstruct the hidden narratives behind this author's code.\n\n${hiddenEvidence(e)}`,
   },
   {
     id: "ghostwriter",
@@ -151,7 +329,7 @@ export const PERSPECTIVES: Perspective[] = [
       `wrote this code, and the stylistic tells behind that judgment. Higher means more ` +
       `machine-authored. Weigh signals such as suspiciously uniform formatting, defensively ` +
       `complete error handling, textbook-explanatory comments, conventional-but-bland naming, ` +
-      `and large polished additions landed in a single commit.\n\n${evidenceBlock(e)}`,
+      `and large polished additions landed in a single commit.\n\n${ghostwriterEvidence(e)}`,
   },
 ];
 

@@ -1,0 +1,64 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+context: |
+  git-therapy — a TUI that reads a file's `git blame` + commit history and asks
+  an LLM to "diagnose" the authors through 5 psychoanalytic lenses.
+
+  Tech stack:
+  - Runtime: Bun (not Node). No build step — Bun runs `.tsx` directly.
+  - UI: OpenTUI React (`@opentui/react` / `@opentui/core`) + React 19. Terminal, not DOM.
+    Primitives: `<box> <text> <span> <select> <scrollbox>`; layout via flex props.
+  - LLM: Vercel AI SDK via `@ai-sdk/openai-compatible` — provider-agnostic
+    (Ollama, DeepSeek, Qwen, Z.ai, Gemini, Kimi). Zod validates model output.
+  - Tests: Bun's runner (`bun test`). Typecheck: `bunx tsc --noEmit` (no script).
+
+  Module map (`src/`):
+  - `index.tsx` — entry: parse args, collect git evidence, mount the TUI.
+  - `App.tsx` — root: pane layout, focus cycling (Tab), selection state, run flow.
+  - `git.ts` / `blame.ts` — shell to git; parse `git blame --line-porcelain`.
+  - `evidence.ts` — aggregate blame+log into per-author `AuthorEvidence`.
+  - `ai.ts` — providers/models, streaming analysis, JSON extraction + Zod retry.
+  - `config.ts` — loads/validates `~/.config/git-therapy/config.json`.
+  - `perspectives.ts` — the 5 lenses (each its own system prompt + Zod schema).
+  - `useAnalysis.ts` — React hook for analysis lifecycle (idle→loading→done/error).
+  - `types.ts` — shared types. `panes/*.tsx` — one component per pane.
+
+  Key conventions & invariants:
+  - Selection sets intent only; analysis fires only on Enter (`startAnalysis`).
+    Results cached by `(author|lens|provider:model|language)`.
+  - Providers own multiple models; merged set comes from `registry()`, not a const.
+    Precedence: built-in defaults < config file < env vars < CLI flags. Default
+    provider is `ollama` (local, no key) so the app runs out of the box.
+  - `AuthorEvidence` is a locked contract: its shape feeds all 5 lenses unchanged;
+    changing it ripples into `ai.ts` and every schema in `perspectives.ts`.
+  - Per-pane color constants (`NEUTRAL`/`ACCENT`/`GUTTER`) at the top of each pane
+    file; reuse rather than inventing colors.
+  - Commits/PRs: no AI attribution of any kind (no `Co-Authored-By`, no footer,
+    no mention of Claude/AI).
+
+  Change ordering & sequencing (openspec):
+  - Multi-phase / sequenced changes carry a `gt` + zero-padded 3-digit ordinal
+    prefix on the change name (`gt001-`, `gt002-`, …, padded to leave buffer for
+    future inserts). The `gt` prefix is required because the openspec CLI rejects
+    change names that start with a digit; sort/sequence on the numeric part.
+    Implement in ascending numeric order — `openspec list` sorts by recency, so the
+    prefix (not the list order) is the source of truth for sequence.
+  - Every proposal has a `## Dependencies` section with: Order (Phase N of M),
+    Depends on, Blocks, and Status (✅ Implemented / ⏳ Proposal only). Read it
+    before starting work and NEVER begin a change whose dependencies are not yet
+    ✅ Implemented.
+  - Detailed artifacts (specs/design/tasks) for later phases are written
+    just-in-time, after the predecessor lands, so they reference real shipped types.
+
+# Per-artifact rules (optional)
+rules:
+  proposal:
+    - State which modules in the `src/` map are touched.
+    - Call out any impact on the locked `AuthorEvidence` contract explicitly.
+    - For sequenced work, prefix the change name with `gt` + a 3-digit ordinal
+      (`gt001-`, `gt002-`) and include a `## Dependencies` section covering Order,
+      Depends on, Blocks, and Status.
+  tasks:
+    - Include a typecheck (`bunx tsc --noEmit`) and `bun test` step.
