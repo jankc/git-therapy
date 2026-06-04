@@ -1,0 +1,24 @@
+aaaaaaa1Jane Devjane@x.com2026-05-01T10:00:00+02:00Rebase Botbot@ci.com2026-05-02T11:00:00+02:00refactor: rename moduleThis rewrites the core.
+3 callsites updated across the tree.
+
+Co-authored-by: Sam Human <sam@x.com>
+Co-authored-by: Copilot <copilot@github.com>
+
+10	2	src/{old => new}/core.ts
+-	-	assets/logo.bin
+
+bbbbbbb2Jane Devjane@x.com2026-05-03T09:00:00+02:00Jane Devjane@x.com2026-05-03T09:00:00+02:00chore: tidy
+1	1	src/new/core.ts
+
+ccccccc3Movermover@x.com2026-05-04T08:00:00+02:00Movermover@x.com2026-05-04T08:00:00+02:00move fileSingle line body.
+
+7	3	lib/a.ts => lib/b.ts
+
+ddddddd4Jane Devjane@x.com2026-05-05T07:00:00+02:00Jane Devjane@x.com2026-05-05T07:00:00+02:00feat: add thingImplements the thing.
+
+Co-authored-by: dependabot[bot] <bot@github.com>
+Generated with AI assistance
+
+4	0	src/thing.ts
+2	1	src/thing.test.ts
+

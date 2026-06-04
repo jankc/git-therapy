@@ -18,7 +18,14 @@ export interface RawCommit {
   authorName: string;
   authorMail: string;
   isoDate: string; // strict ISO-8601 with offset (%aI)
-  message: string;
+  message: string; // commit subject (%s)
+  body: string; // full multi-line commit body (%b), distinct from the subject
+  committerName: string; // committer name (%cn), may differ from author on rebase/cherry-pick
+  committerMail: string; // committer email (%ce)
+  committerDate: string; // strict ISO-8601 committer date with offset (%cI)
+  coAuthors: string[]; // `Co-authored-by:` trailer entries
+  aiAssistTrailers: string[]; // trailers attributing AI assistants / bots
+  renamedFrom: string | null; // prior path when this commit renamed the file, else null
   additions: number;
   deletions: number;
 }

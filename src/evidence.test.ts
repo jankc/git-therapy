@@ -8,6 +8,33 @@ import {
 } from "./evidence";
 import type { BlameLine, RawCommit } from "./types";
 
+// Build a RawCommit with safe defaults for the Phase-1 capture fields (committer
+// mirrors author, no body/trailers/rename) so tests need only state what matters.
+function commit(partial: Partial<RawCommit>): RawCommit {
+  const base: RawCommit = {
+    sha: "0000000",
+    authorName: "Jane",
+    authorMail: "jane@x.com",
+    isoDate: "2026-06-05T02:00:00+02:00",
+    message: "",
+    body: "",
+    committerName: "Jane",
+    committerMail: "jane@x.com",
+    committerDate: "2026-06-05T02:00:00+02:00",
+    coAuthors: [],
+    aiAssistTrailers: [],
+    renamedFrom: null,
+    additions: 0,
+    deletions: 0,
+    ...partial,
+  };
+  // Keep committer aligned with author unless the test overrides it explicitly.
+  if (partial.committerName === undefined) base.committerName = base.authorName;
+  if (partial.committerMail === undefined) base.committerMail = base.authorMail;
+  if (partial.committerDate === undefined) base.committerDate = base.isoDate;
+  return base;
+}
+
 function blame(partial: Partial<BlameLine>): BlameLine {
   return {
     lineNumber: 1,
@@ -95,24 +122,20 @@ describe("buildAuthorEvidence", () => {
     blame({ lineNumber: 3, author: "Bob", authorMail: "bob@x.com" }),
   ];
   const commits: RawCommit[] = [
-    {
+    commit({
       sha: "1111111aaaa",
-      authorName: "Jane",
-      authorMail: "jane@x.com",
       isoDate: "2026-06-05T02:00:00+02:00",
       message: "fix ugh",
       additions: 80,
       deletions: 5,
-    },
-    {
+    }),
+    commit({
       sha: "2222222bbbb",
-      authorName: "Jane",
-      authorMail: "jane@x.com",
       isoDate: "2026-06-05T03:00:00+02:00",
       message: "wip revert",
       additions: 12,
       deletions: 40,
-    },
+    }),
   ];
   const evidence = buildAuthorEvidence(lines, commits, "1: code\n2: code\n3: code");
 
