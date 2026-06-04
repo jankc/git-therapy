@@ -20,6 +20,19 @@ const blame: BlameLine[] = [
 
 const ZERO_CODE_SCAN = { todos: 0, fixmes: 0, hacks: 0, exclamations: 0, allCapsTokens: 0, magicNumbers: 0, maxNestingDepth: 0, maxLineLength: 0, profanity: 0 };
 const ZERO_DERIVED = { sessionCount: 0, longestSessionMinutes: 0, longestSessionCommits: 0, latestEndingHourLocal: 0, avgCommitsPerSession: 0, nightOwlRatio: 0, weekendRatio: 0, fixupChainCount: 0, fixupCommitCount: 0, oldestLineAgeDays: 0, newestLineAgeDays: 0, codeScan: ZERO_CODE_SCAN };
+const ZERO_RELATIVE_STAT = { value: 0, median: 0, ratioToMedian: 0, rank: 1, percentile: 1 };
+const ZERO_RELATIVE = {
+  authorCount: 1,
+  nightOwlRatio: ZERO_RELATIVE_STAT,
+  weekendRatio: ZERO_RELATIVE_STAT,
+  avgCommitsPerSession: ZERO_RELATIVE_STAT,
+  longestSessionMinutes: ZERO_RELATIVE_STAT,
+  avgMessageLength: ZERO_RELATIVE_STAT,
+  totalFileCommits: ZERO_RELATIVE_STAT,
+  fixupCommitCount: ZERO_RELATIVE_STAT,
+  linesAuthored: ZERO_RELATIVE_STAT,
+  churnPerCommit: ZERO_RELATIVE_STAT,
+};
 
 function author(name: string, linesAuthored: number): AuthorEvidence {
   return {
@@ -47,6 +60,7 @@ function author(name: string, linesAuthored: number): AuthorEvidence {
     },
     scopeCode: "1: const x = 1;",
     derived: ZERO_DERIVED,
+    relativeToFile: ZERO_RELATIVE,
   };
 }
 

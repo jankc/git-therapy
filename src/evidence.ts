@@ -9,6 +9,8 @@ import type {
   DerivedSignals,
   EvidenceCommit,
   RawCommit,
+  RelativeStat,
+  RelativeToFile,
 } from "./types";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -27,6 +29,88 @@ const TRIVIAL_RE = /\b(tweak|minor|nit|typo|small|tiny|cleanup|polish|wip)\b/i;
 const SWEEPING_RE = /\b(refactor|rewrite|overhaul|migrate|rework|massive|huge)\b/i;
 const FIXUP_RE = /\b(fix|fixup|oops|typo|revert|nvm|nevermind|actually|whoops|argh)\b/i;
 const PROFANITY_LIST = ["shit", "fuck", "crap", "damn", "wtf", "bastard", "asshole"];
+
+type AuthorEvidenceWithoutRelative = Omit<AuthorEvidence, "relativeToFile">;
+type ComparisonMetricKey = Exclude<keyof RelativeToFile, "authorCount">;
+
+const COMPARISON_METRICS: Array<{
+  key: ComparisonMetricKey;
+  extract: (e: AuthorEvidenceWithoutRelative) => number;
+}> = [
+  { key: "nightOwlRatio", extract: (e) => e.derived.nightOwlRatio },
+  { key: "weekendRatio", extract: (e) => e.derived.weekendRatio },
+  { key: "avgCommitsPerSession", extract: (e) => e.derived.avgCommitsPerSession },
+  { key: "longestSessionMinutes", extract: (e) => e.derived.longestSessionMinutes },
+  { key: "avgMessageLength", extract: (e) => e.authorBaseline.avgMessageLength },
+  { key: "totalFileCommits", extract: (e) => e.authorBaseline.totalFileCommits },
+  { key: "fixupCommitCount", extract: (e) => e.derived.fixupCommitCount },
+  { key: "linesAuthored", extract: (e) => e.linesAuthored },
+  { key: "churnPerCommit", extract: (e) => churnPerCommit(e.blamedCommits) },
+];
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function churnPerCommit(commits: EvidenceCommit[]): number {
+  if (commits.length === 0) return 0;
+  return commits.reduce((sum, c) => sum + c.additions + c.deletions, 0) / commits.length;
+}
+
+export function median(values: number[]): number {
+  if (values.length === 0) return 0;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) return sorted[middle]!;
+
+  return (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+export function relativeStat(value: number, allValues: number[]): RelativeStat {
+  const fileMedian = median(allValues);
+  const singleAuthorSelfComparison = allValues.length === 1 && allValues[0] === value;
+  const ratioToMedian = singleAuthorSelfComparison
+    ? 1
+    : fileMedian > 0
+      ? round2(value / fileMedian)
+      : 0;
+  const rank = allValues.filter((candidate) => candidate > value).length + 1;
+  const percentile =
+    allValues.length > 0
+      ? round2(allValues.filter((candidate) => candidate <= value).length / allValues.length)
+      : 0;
+
+  return {
+    value,
+    median: fileMedian,
+    ratioToMedian,
+    rank,
+    percentile,
+  };
+}
+
+export function attachRelativeStats(
+  authors: AuthorEvidenceWithoutRelative[],
+): AuthorEvidence[] {
+  const valuesByMetric = new Map<ComparisonMetricKey, number[]>();
+
+  for (const metric of COMPARISON_METRICS) {
+    valuesByMetric.set(metric.key, authors.map(metric.extract));
+  }
+
+  return authors.map((author) => {
+    const relativeToFile = { authorCount: authors.length } as RelativeToFile;
+
+    for (const metric of COMPARISON_METRICS) {
+      const allValues = valuesByMetric.get(metric.key) ?? [];
+      relativeToFile[metric.key] = relativeStat(metric.extract(author), allValues);
+    }
+
+    return { ...author, relativeToFile };
+  });
+}
 
 /** Collapse a sorted list of line numbers into inclusive ranges. */
 export function compactRanges(nums: number[]): Array<[number, number]> {
@@ -336,7 +420,7 @@ export function buildAuthorEvidence(
   now: number = Date.now(),
 ): AuthorEvidence[] {
   const buckets = bucketByAuthor(lines);
-  const result: AuthorEvidence[] = [];
+  const result: AuthorEvidenceWithoutRelative[] = [];
 
   for (const bucket of buckets.values()) {
     const authorCommits = commits
@@ -382,5 +466,5 @@ export function buildAuthorEvidence(
   }
 
   // Most lines authored first — drives author-pane ordering.
-  return result.sort((a, b) => b.linesAuthored - a.linesAuthored);
+  return attachRelativeStats(result).sort((a, b) => b.linesAuthored - a.linesAuthored);
 }

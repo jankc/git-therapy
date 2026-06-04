@@ -100,6 +100,29 @@ export interface AuthorBaseline {
   timeSpanDays: number;
 }
 
+/** One metric expressed relative to all authors in the scoped file. */
+export interface RelativeStat {
+  value: number; // this author's absolute value for the metric
+  median: number; // file-wide median across compared authors
+  ratioToMedian: number; // value / median; guarded to 0 when the file median is 0
+  rank: number; // 1-based, with 1 = highest value; ties share the same rank
+  percentile: number; // fraction of compared authors with value <= this author's value, [0, 1]
+}
+
+/** Per-author comparison against peers who touched the same scoped file. */
+export interface RelativeToFile {
+  authorCount: number;
+  nightOwlRatio: RelativeStat;
+  weekendRatio: RelativeStat;
+  avgCommitsPerSession: RelativeStat;
+  longestSessionMinutes: RelativeStat;
+  avgMessageLength: RelativeStat;
+  totalFileCommits: RelativeStat;
+  fixupCommitCount: RelativeStat;
+  linesAuthored: RelativeStat;
+  churnPerCommit: RelativeStat;
+}
+
 /** The structured evidence object fed to the LLM, per author. (Locked shape.) */
 export interface AuthorEvidence {
   author: { name: string; email: string };
@@ -114,6 +137,8 @@ export interface AuthorEvidence {
   scopeCode: string; // the scoped lines, with line numbers
   /** Precomputed behavioral aggregates. Cited by lenses from Phase 4 onward. */
   derived: DerivedSignals;
+  /** Cross-author comparison data. Cited by lenses from Phase 4 onward. */
+  relativeToFile: RelativeToFile;
 }
 
 /** Token spend for one analysis call (summed across any retries). */

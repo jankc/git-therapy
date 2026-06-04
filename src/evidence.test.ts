@@ -10,6 +10,8 @@ import {
   lineAgeDays,
   localParts,
   markFixups,
+  median,
+  relativeStat,
   scanCode,
   temporalRatios,
   wordFrequencies,
@@ -18,6 +20,17 @@ import type { BlameLine, EvidenceCommit, RawCommit } from "./types";
 
 // 10 days from Unix epoch — gives ageDays=10 for all authorTime=0 blame lines.
 const NOW_MS = 864_000_000;
+const RELATIVE_METRIC_KEYS = [
+  "nightOwlRatio",
+  "weekendRatio",
+  "avgCommitsPerSession",
+  "longestSessionMinutes",
+  "avgMessageLength",
+  "totalFileCommits",
+  "fixupCommitCount",
+  "linesAuthored",
+  "churnPerCommit",
+] as const;
 
 // Minimal EvidenceCommit with safe defaults for new derived-signal tests.
 function ec(partial: Partial<EvidenceCommit>): EvidenceCommit {
@@ -241,6 +254,160 @@ describe("buildAuthorEvidence", () => {
     // test commits have committerDate === isoDate → landDelayMinutes=0 → isAmend=false
     expect(evidence[0]?.blamedCommits.every((c) => c.isAmend === false)).toBe(true);
   });
+
+  test("attaches relative comparison stats for every author and metric", () => {
+    for (const author of evidence) {
+      expect(author.relativeToFile.authorCount).toBe(2);
+      expect(
+        Object.keys(author.relativeToFile)
+          .filter((key) => key !== "authorCount")
+          .sort(),
+      ).toEqual([...RELATIVE_METRIC_KEYS].sort());
+    }
+
+    const jane = evidence.find((author) => author.author.email === "jane@x.com")!;
+    expect(jane.relativeToFile.linesAuthored).toMatchObject({
+      value: 2,
+      median: 1.5,
+      ratioToMedian: 1.33,
+      rank: 1,
+      percentile: 1,
+    });
+  });
+});
+
+describe("buildAuthorEvidence cross-author comparisons", () => {
+  test("compares authors across the fixed metric set", () => {
+    const evidence = buildAuthorEvidence(
+      [
+        blame({
+          lineNumber: 1,
+          sha: "aaa1111",
+          author: "Alice",
+          authorMail: "alice@x.com",
+        }),
+        blame({
+          lineNumber: 2,
+          sha: "aaa2222",
+          author: "Alice",
+          authorMail: "alice@x.com",
+        }),
+        blame({
+          lineNumber: 3,
+          sha: "bbb1111",
+          author: "Bob",
+          authorMail: "bob@x.com",
+        }),
+        blame({
+          lineNumber: 4,
+          sha: "ccc1111",
+          author: "Cy",
+          authorMail: "cy@x.com",
+        }),
+      ],
+      [
+        commit({
+          sha: "aaa1111xxxx",
+          authorName: "Alice",
+          authorMail: "alice@x.com",
+          isoDate: "2026-06-05T02:00:00+02:00",
+          message: "fix night issue",
+          additions: 10,
+          deletions: 2,
+        }),
+        commit({
+          sha: "aaa2222xxxx",
+          authorName: "Alice",
+          authorMail: "alice@x.com",
+          isoDate: "2026-06-05T23:00:00+02:00",
+          message: "oops followup",
+          additions: 2,
+          deletions: 4,
+        }),
+        commit({
+          sha: "bbb1111xxxx",
+          authorName: "Bob",
+          authorMail: "bob@x.com",
+          isoDate: "2026-06-05T12:00:00+02:00",
+          message: "large daylight change",
+          additions: 100,
+          deletions: 20,
+        }),
+      ],
+      "1: a\n2: b\n3: c\n4: d",
+      NOW_MS,
+    );
+
+    const alice = evidence.find((author) => author.author.email === "alice@x.com")!;
+    const bob = evidence.find((author) => author.author.email === "bob@x.com")!;
+    const cy = evidence.find((author) => author.author.email === "cy@x.com")!;
+
+    for (const author of [alice, bob, cy]) {
+      expect(author.relativeToFile.authorCount).toBe(3);
+      expect(
+        Object.keys(author.relativeToFile)
+          .filter((key) => key !== "authorCount")
+          .sort(),
+      ).toEqual([...RELATIVE_METRIC_KEYS].sort());
+    }
+
+    expect(alice.relativeToFile.linesAuthored).toMatchObject({
+      value: 2,
+      median: 1,
+      ratioToMedian: 2,
+      rank: 1,
+      percentile: 1,
+    });
+    expect(alice.relativeToFile.nightOwlRatio).toMatchObject({
+      value: 1,
+      median: 0,
+      ratioToMedian: 0,
+      rank: 1,
+      percentile: 1,
+    });
+    expect(bob.relativeToFile.churnPerCommit).toMatchObject({
+      value: 120,
+      median: 9,
+      rank: 1,
+      percentile: 1,
+    });
+    expect(cy.relativeToFile.churnPerCommit).toMatchObject({
+      value: 0,
+      rank: 3,
+      percentile: 0.33,
+    });
+  });
+
+  test("single-author files report self-comparison for every metric", () => {
+    const [author] = buildAuthorEvidence(
+      [
+        blame({
+          lineNumber: 1,
+          sha: "solo111",
+          author: "Solo",
+          authorMail: "solo@x.com",
+        }),
+      ],
+      [
+        commit({
+          sha: "solo111xxxx",
+          authorName: "Solo",
+          authorMail: "solo@x.com",
+          isoDate: "2026-06-05T02:00:00+02:00",
+          message: "initial",
+        }),
+      ],
+      "1: solo",
+      NOW_MS,
+    );
+
+    expect(author!.relativeToFile.authorCount).toBe(1);
+    for (const key of RELATIVE_METRIC_KEYS) {
+      expect(author!.relativeToFile[key].rank).toBe(1);
+      expect(author!.relativeToFile[key].percentile).toBe(1);
+      expect(author!.relativeToFile[key].ratioToMedian).toBe(1);
+    }
+  });
 });
 
 describe("clusterSessions", () => {
@@ -296,6 +463,61 @@ describe("temporalRatios", () => {
 
   test("no commits → both 0", () => {
     expect(temporalRatios([])).toEqual({ nightOwlRatio: 0, weekendRatio: 0 });
+  });
+});
+
+describe("median", () => {
+  test("middle value for odd count", () => {
+    expect(median([9, 1, 5])).toBe(5);
+  });
+
+  test("mean of the two middle values for even count", () => {
+    expect(median([10, 2, 4, 8])).toBe(6);
+  });
+
+  test("empty list returns 0", () => {
+    expect(median([])).toBe(0);
+  });
+});
+
+describe("relativeStat", () => {
+  test("reports ratio to median", () => {
+    expect(relativeStat(20, [5, 10, 20])).toMatchObject({
+      value: 20,
+      median: 10,
+      ratioToMedian: 2,
+    });
+  });
+
+  test("highest value ranks first and reaches percentile 1", () => {
+    expect(relativeStat(20, [5, 20, 10])).toMatchObject({
+      rank: 1,
+      percentile: 1,
+    });
+  });
+
+  test("tied values share the highest rank", () => {
+    expect(relativeStat(20, [20, 20, 10]).rank).toBe(1);
+  });
+
+  test("percentile stays within bounds", () => {
+    const bottom = relativeStat(5, [5, 10, 20]);
+    const top = relativeStat(20, [5, 10, 20]);
+
+    expect(bottom.percentile).toBeGreaterThanOrEqual(0);
+    expect(bottom.percentile).toBeLessThanOrEqual(1);
+    expect(bottom.percentile).toBe(0.33);
+    expect(top.percentile).toBe(1);
+  });
+
+  test("zero median yields a finite ratio of 0 while preserving rank", () => {
+    const stat = relativeStat(10, [0, 0, 10]);
+
+    expect(stat.median).toBe(0);
+    expect(stat.ratioToMedian).toBe(0);
+    expect(Number.isFinite(stat.ratioToMedian)).toBe(true);
+    expect(stat.rank).toBe(1);
+    expect(stat.percentile).toBe(1);
   });
 });
 
@@ -420,6 +642,7 @@ describe("buildAuthorEvidence — determinism & shape", () => {
     const r1 = buildAuthorEvidence(lines, commits, "code", NOW_MS);
     const r2 = buildAuthorEvidence(lines, commits, "code", NOW_MS);
     expect(r1).toEqual(r2);
+    expect(r1[0]!.relativeToFile).toEqual(r2[0]!.relativeToFile);
   });
 
   test("derived block present and all fields are numbers or nested objects", () => {
@@ -432,10 +655,31 @@ describe("buildAuthorEvidence — determinism & shape", () => {
     expect(typeof d.codeScan).toBe("object");
   });
 
+  test("relativeToFile block present and all metrics are numeric stats", () => {
+    const [author] = buildAuthorEvidence(lines, commits, "code", NOW_MS);
+    expect(author!.relativeToFile.authorCount).toBe(1);
+    for (const key of RELATIVE_METRIC_KEYS) {
+      const stat = author!.relativeToFile[key];
+      expect(typeof stat.value).toBe("number");
+      expect(typeof stat.median).toBe("number");
+      expect(typeof stat.ratioToMedian).toBe("number");
+      expect(typeof stat.rank).toBe("number");
+      expect(typeof stat.percentile).toBe("number");
+    }
+  });
+
   test("pre-existing fields retain their shape", () => {
     const [author] = buildAuthorEvidence(lines, commits, "code", NOW_MS);
     expect(author!.linesAuthored).toBe(1);
     expect(author!.lineRanges).toEqual([[1, 1]]);
     expect(typeof author!.authorBaseline.totalFileCommits).toBe("number");
+    expect(author!.derived).toMatchObject({
+      sessionCount: 1,
+      fixupCommitCount: 0,
+      codeScan: {
+        todos: 0,
+        fixmes: 0,
+      },
+    });
   });
 });
