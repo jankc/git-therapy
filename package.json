@@ -5,7 +5,11 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/index.tsx"
+    "start": "bun run src/index.tsx",
+    "dev": "bun run --watch src/index.tsx",
+    "test": "bun test",
+    "typecheck": "tsc",
+    "check": "bun run typecheck && bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",

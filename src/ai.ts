@@ -20,65 +20,55 @@ export interface AnalysisResult {
   usage: TokenUsage;
 }
 
+// A provider is one endpoint + credential that can serve several models. The
+// model is no longer baked into the provider id: a selection is a (provider,
+// model) pair, cycled in the TUI with 'm' (provider) and 'M' (model).
 interface ProviderConfig {
   baseURL: string;
   envKey: string | null; // null = no key needed (ollama)
-  model: string;
+  models: string[]; // non-empty; the first is the provider's default model
 }
 
-const PROVIDERS: Record<string, ProviderConfig> = {
-  "ollama-qwen": {
+const PROVIDERS = {
+  ollama: {
     baseURL: "http://localhost:11434/v1",
     envKey: null,
-    model: process.env.OLLAMA_MODEL ?? "qwen3.6:27b-mlx",
+    models: [process.env.OLLAMA_MODEL ?? "qwen3.6:27b-mlx", "gemma4:26b-mlx"],
   },
-  "ollama-gemma": {
-    baseURL: "http://localhost:11434/v1",
-    envKey: null,
-    model: "gemma4:26b-mlx",
+  openrouter: {
+    baseURL: "https://openrouter.ai/api/v1",
+    envKey: "OPENROUTER_API_KEY",
+    models: [
+      process.env.DEEPSEEK_MODEL ?? "deepseek/deepseek-v4-flash",
+      process.env.QWEN_MODEL ?? "qwen/qwen3.6-flash",
+    ],
   },
-  // kimi: {
-  //   // baseURL: "https://api.moonshot.ai/v1",
-  //   baseURL: "https://api.kimi.com/coding/v1",
-  //   envKey: "KIMI_API_KEY",
-  //   model: process.env.KIMI_MODEL ?? "kimi-k2.6",
-  // },
   zai: {
     // z.ai GLM via its OpenAI-compatible GLM Coding Plan endpoint (Bearer auth —
     // reuses the same key you use with Claude Code). For a regular pay-as-you-go
     // key use https://api.z.ai/api/paas/v4. Override with ZAI_BASE_URL / ZAI_MODEL.
     baseURL: process.env.ZAI_BASE_URL ?? "https://api.z.ai/api/coding/paas/v4",
     envKey: "Z_AI_API_TOKEN",
-    model: process.env.ZAI_MODEL ?? "glm-5.1",
-  },
-  deepseek: {
-    baseURL: "https://openrouter.ai/api/v1",
-    envKey: "OPENROUTER_API_KEY",
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek/deepseek-v4-flash",
-  },
-  qwen: {
-    baseURL: "https://openrouter.ai/api/v1",
-    envKey: "OPENROUTER_API_KEY",
-    model: process.env.QWEN_MODEL ?? "qwen/qwen3.6-flash",
+    models: [process.env.ZAI_MODEL ?? "glm-5.1"],
   },
   gemini: {
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
     envKey: "GEMINI_API_KEY",
-    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+    models: [process.env.GEMINI_MODEL ?? "gemini-3.5-flash"],
   },
-};
+} satisfies Record<string, ProviderConfig>;
 
-// Cycle order for the in-app model selector ('m' key). The provider is no longer
-// frozen at startup — it is chosen at runtime and threaded into generateAnalysis.
-export const PROVIDER_ORDER = [
-  "deepseek",
-  "qwen",
-  "zai",
-  "gemini",
-  "ollama-qwen",
-  "ollama-gemma",
-] as const;
+// Cycle order for the provider selector ('m' key). Starts on ollama: local, no
+// key required, so the app works out of the box and a missing cloud key never
+// blocks startup. The selection is chosen at runtime and threaded into generateAnalysis.
+export const PROVIDER_ORDER = ["ollama", "openrouter", "zai", "gemini"] as const;
 export type ProviderId = (typeof PROVIDER_ORDER)[number];
+
+/** A concrete choice: which provider, and which of its models. */
+export interface ModelSelection {
+  providerId: ProviderId;
+  model: string;
+}
 
 // Output language for the analysis ('l' key). The model writes all human-readable
 // text in this language; the JSON keys stay English so schema validation holds.
@@ -95,7 +85,7 @@ function languageInstruction(language: Language): string {
 
 export interface ProviderInfo {
   id: ProviderId;
-  model: string;
+  models: string[];
   /** true when no key is required (ollama) or the required key is present. */
   hasKey: boolean;
 }
@@ -110,35 +100,60 @@ function keyPresent(cfg: ProviderConfig): boolean {
   return !cfg.envKey || !!process.env[cfg.envKey];
 }
 
-/** All selectable providers with their model and key availability (for the UI). */
+/** All selectable providers with their models and key availability (for the UI). */
 export function listProviders(): ProviderInfo[] {
   return PROVIDER_ORDER.map((id) => {
     const cfg = configFor(id);
-    return { id, model: cfg.model, hasKey: keyPresent(cfg) };
+    return { id, models: cfg.models, hasKey: keyPresent(cfg) };
   });
 }
 
-/** The provider to start on: GIT_THERAPY_PROVIDER if valid, else ollama. */
-export function defaultProviderId(): ProviderId {
+/** Switch to a provider, landing on its first (default) model. */
+export function selectProvider(id: ProviderId): ModelSelection {
+  return { providerId: id, model: configFor(id).models[0]! };
+}
+
+/**
+ * The (provider, model) to start on: GIT_THERAPY_PROVIDER if it names a known
+ * provider, else the first in PROVIDER_ORDER (ollama — local, no key needed).
+ * The model defaults to that provider's first; override per provider with the
+ * *_MODEL env vars.
+ */
+export function defaultSelection(): ModelSelection {
   const env = process.env.GIT_THERAPY_PROVIDER;
-  return env && (PROVIDER_ORDER as readonly string[]).includes(env)
-    ? (env as ProviderId)
-    : PROVIDER_ORDER[0];
+  const id =
+    env && (PROVIDER_ORDER as readonly string[]).includes(env)
+      ? (env as ProviderId)
+      : PROVIDER_ORDER[0];
+  return selectProvider(id);
 }
 
-export function modelLabel(id: ProviderId): string {
-  return `${id} · ${configFor(id).model}`;
+/** Next provider in cycle order (wraps), landing on its default model. */
+export function cycleProvider(current: ModelSelection): ModelSelection {
+  const i = PROVIDER_ORDER.indexOf(current.providerId);
+  return selectProvider(PROVIDER_ORDER[(i + 1) % PROVIDER_ORDER.length]!);
 }
 
-/** Construct the OpenAI-compatible AI SDK model for the given provider. */
-function buildModel(id: ProviderId, cfg: ProviderConfig) {
+/** Next model within the current provider (wraps); provider unchanged. */
+export function cycleModel(current: ModelSelection): ModelSelection {
+  const models = configFor(current.providerId).models;
+  const i = models.indexOf(current.model);
+  return { ...current, model: models[(i + 1) % models.length]! };
+}
+
+export function modelLabel(selection: ModelSelection): string {
+  return `${selection.providerId} · ${selection.model}`;
+}
+
+/** Construct the OpenAI-compatible AI SDK model for the given selection. */
+function buildModel(selection: ModelSelection, cfg: ProviderConfig) {
   const openai = createOpenAICompatible({
-    name: id,
+    name: selection.providerId,
     baseURL: cfg.baseURL,
     apiKey: cfg.envKey ? process.env[cfg.envKey]! : "ollama",
     includeUsage: true, // request token usage in streaming responses
   });
-  return openai(cfg.model);
+  return openai(selection.model);
 }
 
 /** Rough token estimate when a provider omits usage from the stream (~4 chars/token). */
@@ -192,18 +207,18 @@ function extractJson(text: string): unknown {
 export async function generateAnalysis(
   evidence: AuthorEvidence,
   perspective: Perspective,
-  providerId: ProviderId,
+  selection: ModelSelection,
   language: Language,
   signal?: AbortSignal,
   onProgress?: (approxOutputTokens: number) => void,
 ): Promise<AnalysisResult> {
-  const cfg = configFor(providerId);
+  const cfg = configFor(selection.providerId);
   if (cfg.envKey && !process.env[cfg.envKey]) {
     throw new Error(
-      `missing ${cfg.envKey} for "${providerId}" — set it, or press 'm' for a local model (ollama)`,
+      `missing ${cfg.envKey} for "${selection.providerId}" — set it, or press 'm' for a local model (ollama)`,
     );
   }
-  const model = buildModel(providerId, cfg);
+  const model = buildModel(selection, cfg);
 
   const system =
     perspective.system +
@@ -229,7 +244,7 @@ export async function generateAnalysis(
     if (OUTGOING_LOG) {
       appendFileSync(
         OUTGOING_LOG,
-        `\n=== → model (${providerId}/${cfg.model}, lens=${perspective.id}, attempt ${attempt + 1}) ===\n` +
+        `\n=== → model (${selection.providerId}/${selection.model}, lens=${perspective.id}, attempt ${attempt + 1}) ===\n` +
           `--- system ---\n${attemptSystem}\n` +
           `--- prompt ---\n${prompt}\n=== end ===\n`,
       );

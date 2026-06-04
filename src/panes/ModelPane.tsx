@@ -1,8 +1,9 @@
-// The model selector: a one-line segmented cycler driven by the 'm' hotkey.
-// Shows the active provider · model and a dot for API-key availability.
+// The model selector: a one-line segmented cycler. 'm' cycles the provider, 'M'
+// the model within it. Shows the active provider · model and a dot for API-key
+// availability.
 
 import { TextAttributes } from "@opentui/core";
-import type { ProviderInfo } from "../ai";
+import type { ModelSelection } from "../ai";
 
 const NEUTRAL = "#4B5563";
 const ACCENT = "#A6E22E";
@@ -11,13 +12,14 @@ const KEY_OK = "#A6E22E";
 const KEY_MISSING = "#F87171";
 
 interface ModelPaneProps {
-  provider: ProviderInfo;
+  selection: ModelSelection;
+  hasKey: boolean;
 }
 
-export function ModelPane({ provider }: ModelPaneProps) {
+export function ModelPane({ selection, hasKey }: ModelPaneProps) {
   return (
     <box
-      title="Model  [m]"
+      title="Model  [m/M]"
       border
       borderColor={NEUTRAL}
       paddingLeft={1}
@@ -28,12 +30,10 @@ export function ModelPane({ provider }: ModelPaneProps) {
       <text>
         <span fg={DIM}>‹ </span>
         <span fg={ACCENT} attributes={TextAttributes.BOLD}>
-          {provider.id} · {provider.model}
+          {selection.providerId} · {selection.model}
         </span>
         <span fg={DIM}> ›  </span>
-        <span fg={provider.hasKey ? KEY_OK : KEY_MISSING}>
-          {provider.hasKey ? "●" : "○"}
-        </span>
+        <span fg={hasKey ? KEY_OK : KEY_MISSING}>{hasKey ? "●" : "○"}</span>
       </text>
     </box>
   );

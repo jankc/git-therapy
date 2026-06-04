@@ -6,7 +6,7 @@
 // it safe under React StrictMode double-invoke and rapid restarts.
 
 import { useEffect, useState } from "react";
-import { generateAnalysis, type Language, type ProviderId } from "./ai";
+import { generateAnalysis, type Language, type ModelSelection } from "./ai";
 import type { Perspective } from "./perspectives";
 import type { AnalysisState, AuthorEvidence } from "./types";
 
@@ -15,7 +15,7 @@ export interface AnalysisRequest {
   id: number;
   evidence: AuthorEvidence;
   perspective: Perspective;
-  providerId: ProviderId;
+  selection: ModelSelection;
   language: Language;
 }
 
@@ -49,7 +49,7 @@ export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
     generateAnalysis(
       request.evidence,
       request.perspective,
-      request.providerId,
+      request.selection,
       request.language,
       controller.signal,
       onProgress,
@@ -100,8 +100,8 @@ export function analysisStateMatchesRequest(
 export function diagnosisKey(
   evidence: AuthorEvidence,
   perspective: Perspective,
-  providerId: ProviderId,
+  selection: ModelSelection,
   language: Language,
 ): string {
-  return `${evidence.author.email}|${perspective.id}|${providerId}|${language}`;
+  return `${evidence.author.email}|${perspective.id}|${selection.providerId}:${selection.model}|${language}`;
 }

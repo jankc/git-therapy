@@ -7,13 +7,14 @@ import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { INITIAL_FOCUSED_PANE_ID, getNextPaneId, type PaneId } from "./focus";
 import { getPerspective } from "./perspectives";
 import {
-  defaultProviderId,
+  cycleModel,
+  cycleProvider,
+  defaultSelection,
   LANGUAGES,
   listProviders,
   modelLabel,
-  PROVIDER_ORDER,
   type Language,
-  type ProviderId,
+  type ModelSelection,
 } from "./ai";
 import {
   analysisStateMatchesRequest,
@@ -48,7 +49,7 @@ export function App({ file, blame, authors }: AppProps) {
   const [perspectiveIndex, setPerspectiveIndex] = useState(0);
   // The current suspect tracks the Who list cursor; default to the top contributor.
   const [selectedAuthor, setSelectedAuthor] = useState<AuthorEvidence | null>(authors[0] ?? null);
-  const [providerId, setProviderId] = useState<ProviderId>(defaultProviderId());
+  const [selection, setSelection] = useState<ModelSelection>(defaultSelection());
   const [language, setLanguage] = useState<Language>("English");
 
   // The snapshot that actually drives a run.
@@ -80,7 +81,7 @@ export function App({ file, blame, authors }: AppProps) {
 
   // Key availability is fixed for the process; compute the provider list once.
   const providers = useRef(listProviders()).current;
-  const activeProvider = providers.find((p) => p.id === providerId) ?? providers[0]!;
+  const activeProvider = providers.find((p) => p.id === selection.providerId) ?? providers[0]!;
 
   // The result is "fresh" only while it matches the current selection — otherwise
   // the user changed something since the run and the Why pane returns to Ready.
@@ -90,7 +91,8 @@ export function App({ file, blame, authors }: AppProps) {
     selectedAuthor !== null &&
     runRequest.evidence === selectedAuthor &&
     runRequest.perspective === perspective &&
-    runRequest.providerId === providerId &&
+    runRequest.selection.providerId === selection.providerId &&
+    runRequest.selection.model === selection.model &&
     runRequest.language === language;
 
   const suspectName = selectedAuthor
@@ -104,14 +106,14 @@ export function App({ file, blame, authors }: AppProps) {
       ? {
           suspect: runRequest.evidence.author.name || runRequest.evidence.author.email || "(unknown)",
           lens: runRequest.perspective.label,
-          model: modelLabel(runRequest.providerId),
+          model: modelLabel(runRequest.selection),
           language: runRequest.language,
         }
       : null;
 
   // A finished diagnosis for the current selection, if one was cached earlier.
   const cached = selectedAuthor
-    ? cacheRef.current.get(diagnosisKey(selectedAuthor, perspective, providerId, language)) ?? null
+    ? cacheRef.current.get(diagnosisKey(selectedAuthor, perspective, selection, language)) ?? null
     : null;
 
   // Prefer the live run while it matches the selection; otherwise fall back to
@@ -138,7 +140,7 @@ export function App({ file, blame, authors }: AppProps) {
       id: runIdRef.current,
       evidence: selectedAuthor,
       perspective,
-      providerId,
+      selection,
       language,
     });
   }
@@ -160,7 +162,7 @@ export function App({ file, blame, authors }: AppProps) {
           diagnosisKey(
             runRequest.evidence,
             runRequest.perspective,
-            runRequest.providerId,
+            runRequest.selection,
             runRequest.language,
           ),
           analysis,
@@ -180,11 +182,15 @@ export function App({ file, blame, authors }: AppProps) {
       setFocusedPane((current) => getNextPaneId(current));
     } else if (key.name === "q") {
       quit();
-    } else if (key.name === "m") {
-      setProviderId((current) => {
-        const i = PROVIDER_ORDER.indexOf(current);
-        return PROVIDER_ORDER[(i + 1) % PROVIDER_ORDER.length]!;
-      });
+    } else if (key.name === "m" || key.name === "M") {
+      // 'm' cycles the provider (landing on its default model); 'M' (shift)
+      // cycles the model within the current provider. Node-style key parsing
+      // reports both as name "m" + a shift flag; tolerate an upper-case name too.
+      const cycleWithinProvider =
+        key.shift === true || key.name === "M" || key.sequence === "M";
+      setSelection((current) =>
+        cycleWithinProvider ? cycleModel(current) : cycleProvider(current),
+      );
     } else if (key.name === "l") {
       setLanguage((current) => {
         const i = LANGUAGES.indexOf(current);
@@ -199,7 +205,12 @@ export function App({ file, blame, authors }: AppProps) {
     <box flexGrow={1} flexDirection="row" gap={1}>
       {/* Left half: code on top, selections + model/language on the bottom. */}
       <box flexDirection="column" gap={1} style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
-        <WhatPane focused={focusedPane === "what"} file={file} blame={blame} />
+        <WhatPane
+          focused={focusedPane === "what"}
+          file={file}
+          blame={blame}
+          selectedAuthor={selectedAuthor}
+        />
         <box
           flexDirection="column"
           gap={LOWER_CONTROLS_GAP}
@@ -214,7 +225,7 @@ export function App({ file, blame, authors }: AppProps) {
             <PerspectivePane focused={focusedPane === "type"} onChange={setPerspectiveIndex} />
           </box>
           <box flexDirection="row" gap={1} style={{ height: SELECTOR_ROW_HEIGHT }}>
-            <ModelPane provider={activeProvider} />
+            <ModelPane selection={selection} hasKey={activeProvider.hasKey} />
             <LanguagePane language={language} />
           </box>
         </box>
@@ -225,7 +236,7 @@ export function App({ file, blame, authors }: AppProps) {
         perspective={perspective}
         state={displayState}
         suspect={suspectName}
-        model={modelLabel(providerId)}
+        model={modelLabel(selection)}
         language={language}
         activeAnalysis={activeAnalysis}
         fresh={displayFresh}

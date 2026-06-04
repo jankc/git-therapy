@@ -3,7 +3,7 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { parseTarget, type Target } from "./args";
-import { defaultProviderId, modelLabel, PROVIDER_ORDER } from "./ai";
+import { defaultSelection, modelLabel, PROVIDER_ORDER } from "./ai";
 import { collect } from "./git";
 import { buildAuthorEvidence } from "./evidence";
 import { App } from "./App";
@@ -28,15 +28,15 @@ Options:
   -v, --version     show version and exit
 
 Keys (inside the TUI):
-  Tab    move between panes        m    cycle model / provider
-  ↑ / ↓  move the selection        l    toggle language (English / Czech)
-  Enter  run the examination       Esc  cancel a running analysis
+  Tab    move between panes        m / M  cycle provider / model
+  ↑ / ↓  move the selection        l      toggle language (English / Czech)
+  Enter  run the examination       Esc    cancel a running analysis
   q      quit
 
-Providers (set GIT_THERAPY_PROVIDER, or switch live with m):
+Providers (set GIT_THERAPY_PROVIDER, or switch live with m; M picks the model):
   ${PROVIDER_ORDER.join(", ")}
-  Defaults to local Ollama; cloud providers need an API key, e.g.
-  KIMI_API_KEY, Z_AI_API_TOKEN, OPENROUTER_API_KEY (deepseek/qwen), GEMINI_API_KEY.`;
+  Defaults to local Ollama (no key); cloud providers need an API key:
+  OPENROUTER_API_KEY (openrouter: deepseek/qwen), Z_AI_API_TOKEN (zai), GEMINI_API_KEY (gemini).`;
 
 const rawArg = process.argv[2];
 if (rawArg === "-h" || rawArg === "--help") {
@@ -71,7 +71,7 @@ if (blame.length === 0) {
 
 const authors = buildAuthorEvidence(blame, commits, scopeCode);
 
-console.error(`git-therapy: ${authors.length} author(s), model ${modelLabel(defaultProviderId())}`);
+console.error(`git-therapy: ${authors.length} author(s), model ${modelLabel(defaultSelection())}`);
 
 const renderer = await createCliRenderer();
 

@@ -36,7 +36,7 @@ function request(id: number): AnalysisRequest {
     id,
     evidence,
     perspective: PERSPECTIVES[0]!,
-    providerId: "ollama-qwen",
+    selection: { providerId: "ollama", model: "qwen3.6:27b-mlx" },
     language: "English",
   };
 }

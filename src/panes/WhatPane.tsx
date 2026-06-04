@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import type { BlameLine } from "../types";
+import type { AuthorEvidence, BlameLine } from "../types";
 
 const NEUTRAL = "#4B5563";
 const ACCENT = "#A6E22E";
@@ -28,9 +28,12 @@ interface WhatPaneProps {
   focused: boolean;
   file: string;
   blame: BlameLine[];
+  selectedAuthor: AuthorEvidence | null;
 }
 
-export function WhatPane({ focused, file, blame }: WhatPaneProps) {
+export function WhatPane({ focused, file, blame, selectedAuthor }: WhatPaneProps) {
+  // Match lines to the suspect the same way evidence buckets them (evidence.ts).
+  const selectedKey = selectedAuthor?.author.email || selectedAuthor?.author.name || null;
   const ref = useRef<ScrollBoxRenderable>(null);
   // Imperatively grab keyboard focus so arrow keys scroll this pane.
   useEffect(() => {
@@ -51,14 +54,18 @@ export function WhatPane({ focused, file, blame }: WhatPaneProps) {
         {blame.length === 0 ? (
           <text attributes={TextAttributes.DIM}>No blame data for this scope.</text>
         ) : (
-          blame.map((line) => (
-            <text key={line.lineNumber}>
-              <span fg={GUTTER} attributes={TextAttributes.DIM}>
-                {line.sha} {initials(line.author).padEnd(2)} {shortDate(line.authorTime)}{" "}
-              </span>
-              {line.code}
-            </text>
-          ))
+          blame.map((line) => {
+            // Brighten the gutter for the selected suspect; leave others muted.
+            const mine = selectedKey !== null && (line.authorMail || line.author) === selectedKey;
+            return (
+              <text key={line.lineNumber}>
+                <span fg={mine ? ACCENT : GUTTER} attributes={mine ? undefined : TextAttributes.DIM}>
+                  {line.sha} {initials(line.author).padEnd(2)} {shortDate(line.authorTime)}{" "}
+                </span>
+                {line.code}
+              </text>
+            );
+          })
         )}
       </scrollbox>
     </box>
