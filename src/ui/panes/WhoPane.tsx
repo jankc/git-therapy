@@ -17,8 +17,10 @@ export function WhoPane({ focused, authors, onChange }: WhoPaneProps) {
 
   const options: SelectOption[] = authors.map((a) => {
     const pct = Math.round((a.linesAuthored / totalLines) * 100);
+    const name = a.author.name || a.author.email || "(unknown)";
+    const label = a.author.email ? `${name} · ${a.author.email}` : name;
     return {
-      name: a.author.name || a.author.email || "(unknown)",
+      name: label,
       description: `${pct}% · ${a.linesAuthored} lines`,
       value: a.author.email,
     };

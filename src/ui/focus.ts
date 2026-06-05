@@ -9,3 +9,9 @@ export function getNextPaneId(current: PaneId): PaneId {
   const nextIndex = (index + 1) % PANE_IDS.length;
   return PANE_IDS[nextIndex] as PaneId;
 }
+
+export function getPrevPaneId(current: PaneId): PaneId {
+  const index = PANE_IDS.indexOf(current);
+  const prevIndex = (index - 1 + PANE_IDS.length) % PANE_IDS.length;
+  return PANE_IDS[prevIndex] as PaneId;
+}

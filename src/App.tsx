@@ -4,7 +4,12 @@
 
 import { useState } from "react";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
-import { INITIAL_FOCUSED_PANE_ID, getNextPaneId, type PaneId } from "./ui/focus";
+import {
+  INITIAL_FOCUSED_PANE_ID,
+  getNextPaneId,
+  getPrevPaneId,
+  type PaneId,
+} from "./ui/focus";
 import { getPerspective } from "./ai/perspectives";
 import { modelLabel, type Language, type ModelSelection } from "./ai/llm";
 import { useModelSelection } from "./ui/useModelSelection";
@@ -105,7 +110,10 @@ export function App({
     } else if (key.name === "tab") {
       key.preventDefault();
       key.stopPropagation();
-      setFocusedPane((current) => getNextPaneId(current));
+      const reverse = key.shift === true;
+      setFocusedPane((current) =>
+        reverse ? getPrevPaneId(current) : getNextPaneId(current),
+      );
     } else if (key.name === "q") {
       quit();
     } else if (key.name === "v") {
