@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseGitLog, parseTrailers } from "./git";
+import { parseGitLog, parseNumstatRows, parseTrailers } from "./git";
 import type { RawCommit } from "../types";
 
 // RS/US-delimited `git log --no-merges --follow --numstat` stdout, captured into
@@ -95,6 +95,35 @@ describe("parseGitLog", () => {
     const b = byId("bbbbbbb2");
     expect(b.coAuthors).toEqual([]);
     expect(b.aiAssistTrailers).toEqual([]);
+  });
+});
+
+describe("parseNumstatRows", () => {
+  const rows = parseNumstatRows(fixture);
+
+  test("extracts every changed-file row across all commits", () => {
+    expect(rows.map((r) => r.path)).toEqual([
+      "src/new/core.ts", // brace-form rename resolves to the NEW path
+      "assets/logo.bin",
+      "src/new/core.ts",
+      "lib/b.ts", // whole-path rename resolves to the NEW path
+      "src/thing.ts",
+      "src/thing.test.ts",
+    ]);
+  });
+
+  test("binary rows contribute 0 churn rather than NaN", () => {
+    const binary = rows.find((r) => r.path === "assets/logo.bin")!;
+    expect(binary).toMatchObject({ additions: 0, deletions: 0 });
+  });
+
+  test("a digit-leading body line is not mistaken for a numstat row", () => {
+    // aaaaaaa1's body contains "3 callsites updated across the tree." — never a path here.
+    expect(rows.some((r) => r.path.includes("callsites"))).toBe(false);
+  });
+
+  test("empty input yields an empty array", () => {
+    expect(parseNumstatRows("")).toEqual([]);
   });
 });
 

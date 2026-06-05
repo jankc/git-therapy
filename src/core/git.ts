@@ -55,6 +55,70 @@ export async function collectLog(file: string, cwd: string): Promise<RawCommit[]
 }
 
 /**
+ * Collect an author's whole-repo history (gt005): author-filtered and mailmap-resolved so
+ * one human isn't fragmented across emails, path-agnostic (no `--follow`, which requires a
+ * single pathspec). Tolerant by design — a git failure (shallow clone, detached state, no
+ * matching author) resolves to an empty result so the file-tier analysis is unaffected.
+ * Returns the parsed commits plus the raw numstat paths (for language breakdown), since
+ * `RawCommit` deliberately discards per-file paths.
+ */
+/** One changed-file row from `git log --numstat`, with its post-rename path and churn. */
+export interface NumstatFileChange {
+  path: string; // post-rename path
+  additions: number;
+  deletions: number;
+}
+
+export async function collectAuthorLog(
+  author: string,
+  cwd: string,
+): Promise<{ commits: RawCommit[]; files: NumstatFileChange[] }> {
+  try {
+    const out = await runGit(
+      ["log", "--no-merges", "--use-mailmap", `--author=${author}`, "--numstat", `--pretty=format:${LOG_FORMAT}`],
+      cwd,
+    );
+    return { commits: parseGitLog(out), files: parseNumstatRows(out) };
+  } catch {
+    return { commits: [], files: [] };
+  }
+}
+
+/**
+ * Extract every changed-file row from the numstat lines of a `git log --numstat` dump,
+ * resolving rename rows to their new path. Pure so it is unit-testable; kept separate from
+ * `parseGitLog` so the locked `RawCommit` shape gains no per-file field.
+ */
+export function parseNumstatRows(stdout: string): NumstatFileChange[] {
+  const rows: NumstatFileChange[] = [];
+  for (const rawLine of stdout.split("\n")) {
+    // A numstat row only ever appears after the RS/US header fields; the strict regex and
+    // the tab layout keep body lines (even digit-leading ones) from matching.
+    if (!NUMSTAT_RE.test(rawLine)) continue;
+    const [addStr, delStr, ...pathParts] = rawLine.split("\t");
+    rows.push({
+      path: renameTarget(pathParts.join("\t")),
+      additions: addStr === "-" ? 0 : Number(addStr) || 0,
+      deletions: delStr === "-" ? 0 : Number(delStr) || 0,
+    });
+  }
+  return rows;
+}
+
+/** The post-rename path for a numstat path cell, or the path unchanged when not a rename. */
+function renameTarget(path: string): string {
+  if (!path.includes("=>")) return path;
+  const brace = path.match(/^(.*)\{(.*) => (.*)\}(.*)$/);
+  if (brace) {
+    const [, prefix, , newMid, suffix] = brace;
+    return `${prefix}${newMid}${suffix}`.replace(/\/{2,}/g, "/");
+  }
+  const simple = path.match(/^(.*) => (.*)$/);
+  if (simple) return simple[2] ?? path;
+  return path;
+}
+
+/**
  * Parse RS/US-delimited `git log --numstat` stdout into RawCommit records.
  * Pure (no git invocation) so it is unit-testable against captured fixtures.
  */

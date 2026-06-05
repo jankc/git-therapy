@@ -28,7 +28,10 @@ next to their source; `core/__fixtures__/` holds the git output samples.
 - `types.ts` — shared types, including the locked `AuthorEvidence` contract.
 - `core/`
   - `git.ts` / `blame.ts` — shell to git; parse `git blame --line-porcelain` → `BlameLine[]`.
+    `collectAuthorLog` + `parseNumstatRows` add the gt005 whole-repo, author-scoped pass.
   - `evidence.ts` — aggregate blame+log into per-author `AuthorEvidence` (buckets by email).
+  - `baseline.ts` — reduce an author's whole-repo history to a fixed-cardinality
+    `RepoBaseline` (the optional gt005 "career chart" tier); reuses `evidence.ts` reducers.
   - `args.ts` — parse the `<path>[:<start>-<end>]` invocation into a `Target`.
 - `ai/`
   - `llm.ts` — providers (each owns multiple models), model build, streaming analysis,
@@ -62,6 +65,10 @@ next to their source; `core/__fixtures__/` holds the git output samples.
   `BUILTIN_ORDER` unless you deliberately want a key-required default.
 - **`AuthorEvidence` is a locked contract.** Its shape is fed unchanged to all 5 lenses;
   changing it ripples into `llm.ts` and every schema in `perspectives.ts`. Touch with care.
+  Extend it *additively* (the gt002/gt003/gt005 pattern): `derived`, `relativeToFile`, and the
+  optional `repoBaseline?` were each added without altering existing fields, so consumers that
+  ignore them are unaffected. When `repoBaseline` is present each lens (except `hidden`) adds a
+  file-vs-career deviation projection; absent ⇒ the pre-gt005 prompt, byte-for-byte.
 
 ## Commit messages
 

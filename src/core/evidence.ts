@@ -11,6 +11,7 @@ import type {
   RawCommit,
   RelativeStat,
   RelativeToFile,
+  RepoBaseline,
 } from "../types";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -52,7 +53,7 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function churnPerCommit(commits: EvidenceCommit[]): number {
+export function churnPerCommit(commits: EvidenceCommit[]): number {
   if (commits.length === 0) return 0;
   return commits.reduce((sum, c) => sum + c.additions + c.deletions, 0) / commits.length;
 }
@@ -355,7 +356,7 @@ export function bucketByAuthor(
   return buckets;
 }
 
-function toEvidenceCommits(commits: RawCommit[]): EvidenceCommit[] {
+export function toEvidenceCommits(commits: RawCommit[]): EvidenceCommit[] {
   let prevMs: number | null = null;
 
   return commits.map((c) => {
@@ -413,6 +414,7 @@ export function buildAuthorEvidence(
   commits: RawCommit[],
   scopeCode: string,
   now: number = Date.now(),
+  repoBaselines?: Map<string, RepoBaseline>,
 ): AuthorEvidence[] {
   const buckets = bucketByAuthor(lines);
   const result: AuthorEvidenceWithoutRelative[] = [];
@@ -448,6 +450,10 @@ export function buildAuthorEvidence(
       codeScan: scanCode(bucket.lines.map((l) => l.code)),
     };
 
+    // Optional gt005 career-baseline tier; left absent when the repo pass was skipped or
+    // failed for this author, so consumers see the identical pre-gt005 shape.
+    const repoBaseline = repoBaselines?.get(bucket.email || bucket.name);
+
     result.push({
       author: { name: bucket.name, email: bucket.email },
       linesAuthored: bucket.lineNumbers.length,
@@ -457,6 +463,7 @@ export function buildAuthorEvidence(
       authorBaseline: buildAuthorBaseline(authorCommits),
       scopeCode,
       derived,
+      ...(repoBaseline ? { repoBaseline } : {}),
     });
   }
 

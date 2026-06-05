@@ -15,8 +15,11 @@ hungover when you committed `fix: actually fix it this time`. It does this very 
 
 You give it a file. It collects real evidence from your repository — blamed lines,
 blamed commits, commit hours, weekday distribution, line ranges, surrounding source
-context — and presents that evidence to a model under a strict instruction to behave
-like a calm, slightly pretentious lab report and to **cite its sources**.
+context — plus a **whole-repo career baseline** for each author (their usual hours,
+languages, cadence, and style across every file they've touched). It presents that
+evidence to a model under a strict instruction to behave like a calm, slightly
+pretentious lab report, to **cite its sources**, and to read this file as a *deviation*
+from the author's own norm ("calmer than usual," "outside their usual languages").
 
 The verdict streams in as Markdown with highlighted measurements and short narrative findings.
 Each metric uses a format that fits the claim: probabilities are percentages, experience is
@@ -83,7 +86,7 @@ and therefore no diagnosis, for code that was never committed. (Make of that wha
 | `Enter` | run the examination             |
 | `m / M` | cycle provider / model          |
 | `l`     | cycle output language (from config) |
-| `v`     | toggle code / evidence summary  |
+| `v`     | toggle code / evidence summary (incl. career baseline) |
 | `Esc`   | cancel a running analysis       |
 | `q`     | quit                            |
 

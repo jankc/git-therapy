@@ -99,6 +99,26 @@ function EvidenceView({
         <text attributes={TextAttributes.DIM}>No suspect selected.</text>
       )}
 
+      {selectedAuthor?.repoBaseline ? (
+        <box marginTop={1} flexDirection="column">
+          <text attributes={TextAttributes.BOLD}>Career baseline (whole repo)</text>
+          <text>
+            {selectedAuthor.repoBaseline.totalRepoCommits} commits ·{" "}
+            {selectedAuthor.repoBaseline.timeSpanDays.toFixed(0)} days span
+          </text>
+          <text>
+            night-owl {(selectedAuthor.repoBaseline.nightOwlRatio * 100).toFixed(0)}% · weekend{" "}
+            {(selectedAuthor.repoBaseline.weekendRatio * 100).toFixed(0)}%
+          </text>
+          <text fg={GUTTER}>
+            {selectedAuthor.repoBaseline.languageBreakdown
+              .slice(0, 4)
+              .map((l) => `${l.ext}×${l.files}`)
+              .join(" · ") || "(no languages)"}
+          </text>
+        </box>
+      ) : null}
+
       <box marginTop={1} flexDirection="column">
         <text attributes={TextAttributes.BOLD}>Collection</text>
         <text>
@@ -109,8 +129,14 @@ function EvidenceView({
         </text>
         <text fg={GUTTER}>git blame --line-porcelain</text>
         <text fg={GUTTER}>git log --no-merges --follow --numstat</text>
+        {summary.repoCollectionMs !== undefined ? (
+          <text fg={GUTTER}>git log --use-mailmap --author=… --numstat</text>
+        ) : null}
         <text fg={GUTTER}>
           git {fmtDuration(summary.gitCollectionMs)} · derive {fmtDuration(summary.evidenceBuildMs)}
+          {summary.repoCollectionMs !== undefined
+            ? ` · repo ${fmtDuration(summary.repoCollectionMs)}`
+            : ""}
         </text>
       </box>
     </box>

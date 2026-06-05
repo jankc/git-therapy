@@ -2,6 +2,7 @@
 // Entry point: parse argv -> (subcommand | help | version) or
 // preflight key -> collect git evidence -> mount TUI.
 
+import { dirname, resolve } from "node:path";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { parseInvocation, type Target } from "./core/args";
@@ -18,8 +19,10 @@ import {
   type ModelSelection,
 } from "./ai/llm";
 import { configExists, configPath, initConfig } from "./ai/config";
-import { collect } from "./core/git";
-import { buildAuthorEvidence } from "./core/evidence";
+import { collect, collectAuthorLog } from "./core/git";
+import { buildAuthorEvidence, bucketByAuthor } from "./core/evidence";
+import { buildRepoBaseline } from "./core/baseline";
+import type { RepoBaseline } from "./types";
 import { App } from "./App";
 import type { EvidenceCollectionSummary } from "./types";
 import pkg from "../package.json";
@@ -169,9 +172,38 @@ if (blame.length === 0) {
   fail(`no blame data for ${target.file} — is it a tracked file in this repo?`);
 }
 
+// gt005: per-author whole-repo career baseline, collected as a second, tolerant pass
+// alongside the file specimen. Any failure degrades to an absent baseline (file-tier
+// analysis is unaffected); only authors with real repo history get a baseline attached.
+const repoCollectionStartedAt = performance.now();
+const repoBaselines = new Map<string, RepoBaseline>();
+let repoHistoryCommits = 0;
+let repoPassRan = false;
+try {
+  const cwd = dirname(resolve(target.file));
+  const buckets = [...bucketByAuthor(blame).values()];
+  const collected = await Promise.all(
+    buckets.map(async (bucket) => {
+      const key = bucket.email || bucket.name;
+      const { commits: repoCommits, files } = await collectAuthorLog(key, cwd);
+      return { key, repoCommits, files };
+    }),
+  );
+  repoPassRan = true;
+  for (const { key, repoCommits, files } of collected) {
+    repoHistoryCommits += repoCommits.length;
+    if (repoCommits.length > 0) repoBaselines.set(key, buildRepoBaseline(repoCommits, files));
+  }
+} catch {
+  // Whole pass failed (e.g. path resolution) — leave every baseline absent.
+  repoBaselines.clear();
+  repoPassRan = false;
+}
+const repoCollectionMs = performance.now() - repoCollectionStartedAt;
+
 const now = Date.now();
 const evidenceBuildStartedAt = performance.now();
-const authors = buildAuthorEvidence(blame, commits, scopeCode, now);
+const authors = buildAuthorEvidence(blame, commits, scopeCode, now, repoBaselines);
 const evidenceBuildMs = performance.now() - evidenceBuildStartedAt;
 const evidenceSummary: EvidenceCollectionSummary = {
   scopedLines: blame.length,
@@ -180,6 +212,7 @@ const evidenceSummary: EvidenceCollectionSummary = {
   sourceCharacters: scopeCode.length,
   gitCollectionMs,
   evidenceBuildMs,
+  ...(repoPassRan ? { repoCollectionMs, repoHistoryCommits } : {}),
 };
 
 console.error(`git-therapy: ${authors.length} author(s), model ${modelLabel(selection)}`);

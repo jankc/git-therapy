@@ -15,7 +15,7 @@ import {
   temporalRatios,
   wordFrequencies,
 } from "./evidence";
-import type { BlameLine, EvidenceCommit, RawCommit } from "../types";
+import type { BlameLine, EvidenceCommit, RawCommit, RepoBaseline } from "../types";
 
 // 10 days from Unix epoch — gives ageDays=10 for all authorTime=0 blame lines.
 const NOW_MS = 864_000_000;
@@ -672,5 +672,55 @@ describe("buildAuthorEvidence — determinism & shape", () => {
         fixmes: 0,
       },
     });
+  });
+});
+
+describe("buildAuthorEvidence — optional repoBaseline (gt005)", () => {
+  const lines = [blame({ lineNumber: 1, sha: "aaa1111", authorMail: "x@x.com" })];
+  const commits = [commit({ sha: "aaa1111xxx", authorMail: "x@x.com" })];
+
+  const baseline: RepoBaseline = {
+    totalRepoCommits: 7,
+    timeSpanDays: 30,
+    hourHistogram: { 14: 7 },
+    weekdayHistogram: { Friday: 7 },
+    nightOwlRatio: 0.1,
+    weekendRatio: 0.2,
+    sessionCount: 3,
+    avgCommitsPerSession: 2.3,
+    longestSessionMinutes: 120,
+    churnPerCommit: 40,
+    avgMessageLength: 25,
+    messageWordFrequencies: { fix: 3 },
+    fixupChainCount: 1,
+    fixupCommitCount: 2,
+    coAuthorRate: 0,
+    aiAssistTrailerRate: 0.5,
+    languageBreakdown: [{ ext: "ts", files: 5, churn: 200 }],
+    representativeCommits: [],
+  };
+
+  test("attaches the baseline for a matching author key", () => {
+    const map = new Map<string, RepoBaseline>([["x@x.com", baseline]]);
+    const [author] = buildAuthorEvidence(lines, commits, "code", NOW_MS, map);
+    expect(author!.repoBaseline).toEqual(baseline);
+  });
+
+  test("baseline is absent when no map is passed (pre-gt005 shape)", () => {
+    const [author] = buildAuthorEvidence(lines, commits, "code", NOW_MS);
+    expect("repoBaseline" in author!).toBe(false);
+  });
+
+  test("baseline is absent when the map has no entry for this author", () => {
+    const map = new Map<string, RepoBaseline>([["someone-else@x.com", baseline]]);
+    const [author] = buildAuthorEvidence(lines, commits, "code", NOW_MS, map);
+    expect("repoBaseline" in author!).toBe(false);
+  });
+
+  test("attaching a baseline leaves every other field byte-identical", () => {
+    const withMap = buildAuthorEvidence(lines, commits, "code", NOW_MS, new Map([["x@x.com", baseline]]));
+    const without = buildAuthorEvidence(lines, commits, "code", NOW_MS);
+    const { repoBaseline, ...rest } = withMap[0]!;
+    expect(rest).toEqual(without[0]!);
   });
 });

@@ -1,7 +1,7 @@
 // The perspective registry: one git evidence input, several prompts, several readings.
 // Every lens emits Markdown so the analysis can render while it is still streaming.
 
-import type { AuthorEvidence } from "../types";
+import type { AuthorEvidence, RepoBaseline } from "../types";
 
 export interface Perspective {
   id: string;
@@ -109,15 +109,32 @@ interface LensSpec {
   /** Lens-specific derived/baseline/commit fields, JSON-stringified verbatim. */
   signals: (e: AuthorEvidence) => Record<string, unknown>;
   comparison: ComparisonMetric[];
+  /**
+   * gt005 deviation tier: the whole-repo baseline fields this lens reframes against, plus a
+   * one-line instruction to read its metrics relative to that career norm. Both are emitted
+   * only when `repoBaseline` is present, so an absent baseline reproduces the pre-gt005
+   * projection byte-for-byte. Omitted entirely for the hidden lens (file-bound, unchanged).
+   */
+  baseline?: { signals: (b: RepoBaseline) => Record<string, unknown>; framing: string };
   /** `metrics` → metricsInstruction(label, …); `narrative` → raw system prompt. */
   prompt: { metrics: ReportMetric[] } | { narrative: string };
 }
 
 function buildLensEvidence(e: AuthorEvidence, spec: LensSpec): string {
-  return (
+  const base =
     `${coreEvidence(e)}\n` +
     `${spec.signalsHeader}: ${JSON.stringify(spec.signals(e))}\n` +
-    `${comparativeStanding(e, spec.comparison)}`
+    `${comparativeStanding(e, spec.comparison)}`;
+
+  if (!e.repoBaseline || !spec.baseline) return base;
+
+  // The career baseline is the "chart" beside the file "specimen": for deviation only,
+  // explicitly labeled so the model contrasts this file against the author's own norm.
+  return (
+    `${base}\n` +
+    `CAREER BASELINE (whole-repo, for deviation only — NOT this file): ` +
+    `${JSON.stringify(spec.baseline.signals(e.repoBaseline))}\n` +
+    `DEVIATION FRAMING: ${spec.baseline.framing}`
   );
 }
 
@@ -146,6 +163,19 @@ const LENSES: LensSpec[] = [
       },
     }),
     comparison: ["nightOwlRatio", "avgCommitsPerSession", "longestSessionMinutes", "fixupCommitCount"],
+    baseline: {
+      signals: (b) => ({
+        careerNightOwlRatio: b.nightOwlRatio,
+        careerWeekendRatio: b.weekendRatio,
+        careerAvgCommitsPerSession: b.avgCommitsPerSession,
+        careerLongestSessionMinutes: b.longestSessionMinutes,
+      }),
+      framing:
+        "Judge stress, sleep debt, and caffeine/hangover probability relative to this author's " +
+        "CAREER norm above — a signal is 'high' only when this file exceeds their baseline, not " +
+        "in absolute terms. If this file's night/session intensity matches their career figures, " +
+        "say so and keep the metrics near their usual register.",
+    },
     prompt: {
       metrics: [
         {
@@ -202,6 +232,19 @@ const LENSES: LensSpec[] = [
       },
     }),
     comparison: ["linesAuthored", "totalFileCommits", "avgMessageLength", "churnPerCommit", "fixupCommitCount"],
+    baseline: {
+      signals: (b) => ({
+        careerTimeSpanDays: b.timeSpanDays,
+        totalRepoCommits: b.totalRepoCommits,
+        dominantLanguages: b.languageBreakdown,
+        careerChurnPerCommit: b.churnPerCommit,
+      }),
+      framing:
+        "Ground inferred experience in the author's actual repo tenure (careerTimeSpanDays) and " +
+        "breadth (totalRepoCommits, dominantLanguages), not this one file. State whether the " +
+        "scoped file's language is among their dominant languages (a comfort zone) or outside " +
+        "them (a stretch), and let that temper the experience and prior-language judgments.",
+    },
     prompt: {
       metrics: [
         {
@@ -258,6 +301,20 @@ const LENSES: LensSpec[] = [
       commitBodyNote: "No separate commit-body field is present in AuthorEvidence; do not invent body text.",
     }),
     comparison: ["weekendRatio", "avgMessageLength", "totalFileCommits", "churnPerCommit"],
+    baseline: {
+      signals: (b) => ({
+        totalRepoCommits: b.totalRepoCommits,
+        careerTimeSpanDays: b.timeSpanDays,
+        careerWeekendRatio: b.weekendRatio,
+        careerNightOwlRatio: b.nightOwlRatio,
+        representativeCommits: b.representativeCommits,
+      }),
+      framing:
+        "Read resignation-coding and day-before-vacation probability as anomalies against the " +
+        "author's overall repo cadence (totalRepoCommits over careerTimeSpanDays), not from this " +
+        "file alone — a single file cannot show someone going quiet across the repo. Raise these " +
+        "probabilities only when this file's rhythm departs from their established cadence.",
+    },
     prompt: {
       metrics: [
         {
@@ -345,6 +402,20 @@ const LENSES: LensSpec[] = [
         "No AI-assist trailer list is present in AuthorEvidence; only cite assistant/bot tokens if they appear in supplied messages or code.",
     }),
     comparison: ["linesAuthored", "avgMessageLength", "totalFileCommits", "churnPerCommit"],
+    baseline: {
+      signals: (b) => ({
+        aiAssistTrailerRate: b.aiAssistTrailerRate,
+        careerAvgMessageLength: b.avgMessageLength,
+        careerMessageWordFrequencies: b.messageWordFrequencies,
+        careerChurnPerCommit: b.churnPerCommit,
+      }),
+      framing:
+        "Judge AI-authorship as a DEVIATION from this author's established style fingerprint " +
+        "(careerAvgMessageLength, careerMessageWordFrequencies, careerChurnPerCommit) and their " +
+        "habitual AI use (aiAssistTrailerRate). A file that matches their career style argues " +
+        "against AI authorship; a sharp stylistic discontinuity, or a high career AI-trailer " +
+        "rate, argues for it.",
+    },
     prompt: {
       metrics: [
         {

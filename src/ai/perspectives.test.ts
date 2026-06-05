@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { getPerspective, PERSPECTIVES } from "./perspectives";
-import type { AuthorEvidence } from "../types";
+import type { AuthorEvidence, RepoBaseline } from "../types";
 
 const ZERO_CODE_SCAN = { todos: 0, fixmes: 0, hacks: 0, exclamations: 0, allCapsTokens: 0, magicNumbers: 0, maxNestingDepth: 0, maxLineLength: 0, profanity: 0 };
 const ZERO_DERIVED = { sessionCount: 0, longestSessionMinutes: 0, longestSessionCommits: 0, latestEndingHourLocal: 0, avgCommitsPerSession: 0, nightOwlRatio: 0, weekendRatio: 0, fixupChainCount: 0, fixupCommitCount: 0, oldestLineAgeDays: 0, newestLineAgeDays: 0, codeScan: ZERO_CODE_SCAN };
@@ -277,6 +277,61 @@ describe("perspective registry", () => {
 
     expect(prompt).toContain("sole author of this file");
     expect(prompt).not.toContain("rank 1/1");
+  });
+});
+
+const REPO_BASELINE: RepoBaseline = {
+  totalRepoCommits: 412,
+  timeSpanDays: 900,
+  hourHistogram: { 23: 50 },
+  weekdayHistogram: { Friday: 80 },
+  nightOwlRatio: 0.2,
+  weekendRatio: 0.1,
+  sessionCount: 60,
+  avgCommitsPerSession: 3,
+  longestSessionMinutes: 240,
+  churnPerCommit: 55,
+  avgMessageLength: 42,
+  messageWordFrequencies: { refactor: 30, fix: 25 },
+  fixupChainCount: 4,
+  fixupCommitCount: 9,
+  coAuthorRate: 0.05,
+  aiAssistTrailerRate: 0.3,
+  languageBreakdown: [{ ext: "ts", files: 300, churn: 9000 }],
+  representativeCommits: [],
+};
+
+describe("per-lens baseline reframing (gt005)", () => {
+  const withBaseline: AuthorEvidence = { ...MULTI_AUTHOR_EVIDENCE, repoBaseline: REPO_BASELINE };
+
+  test("each non-hidden lens surfaces a labeled career baseline and deviation framing", () => {
+    const baselineFields: Record<string, string> = {
+      mental: "careerNightOwlRatio",
+      skill: "careerTimeSpanDays",
+      context: "totalRepoCommits",
+      ghostwriter: "aiAssistTrailerRate",
+    };
+    for (const [id, field] of Object.entries(baselineFields)) {
+      const prompt = PERSPECTIVES.find((p) => p.id === id)!.buildPrompt(withBaseline);
+      expect(prompt).toContain("CAREER BASELINE (whole-repo, for deviation only");
+      expect(prompt).toContain("DEVIATION FRAMING:");
+      expect(prompt).toContain(field);
+    }
+  });
+
+  test("the hidden lens is unchanged by the baseline (no deviation block)", () => {
+    const hidden = PERSPECTIVES.find((p) => p.id === "hidden")!;
+    expect(hidden.buildPrompt(withBaseline)).not.toContain("CAREER BASELINE");
+    expect(hidden.buildPrompt(withBaseline)).toBe(hidden.buildPrompt(MULTI_AUTHOR_EVIDENCE));
+  });
+
+  test("an absent baseline reproduces the pre-gt005 projection as an exact prefix", () => {
+    for (const p of PERSPECTIVES) {
+      const without = p.buildPrompt(MULTI_AUTHOR_EVIDENCE);
+      expect(without).not.toContain("CAREER BASELINE");
+      // Adding a baseline only appends; the original projection is untouched.
+      expect(p.buildPrompt(withBaseline).startsWith(without)).toBe(true);
+    }
   });
 });
 
