@@ -2,54 +2,31 @@
 // The highlighted row IS the chosen lens (live via onChange) — no number keys,
 // nothing runs until the user starts analysis. Selecting here only sets intent.
 
-import { useEffect, useRef } from "react";
-import { RGBA, type SelectOption, type SelectRenderable } from "@opentui/core";
+import { type SelectOption } from "@opentui/core";
 import { PERSPECTIVES } from "../perspectives";
-
-const NEUTRAL = "#4B5563";
-const ACCENT = "#A6E22E";
-const TRANSPARENT = RGBA.fromValues(0, 0, 0, 0); // inherit the pane background
-const CURSOR_BG = "#1F2937"; // subtle dark band for the highlighted row
+import { SelectPane } from "./SelectPane";
 
 interface PerspectivePaneProps {
   focused: boolean;
   onChange: (index: number) => void;
 }
 
-export function PerspectivePane({ focused, onChange }: PerspectivePaneProps) {
-  const ref = useRef<SelectRenderable>(null);
-  // Imperatively grab keyboard focus so arrow keys move the lens cursor.
-  useEffect(() => {
-    if (focused) ref.current?.focus();
-  }, [focused]);
+const DESCRIPTIONS: Record<string, string> = {
+  mental: "mood · stress · sleep",
+  skill: "experience · habits · understanding",
+  context: "pressure · timing · circumstances",
+  hidden: "workarounds · history · subtext",
+  ghostwriter: "AI signals · style · boilerplate",
+};
 
+export function PerspectivePane({ focused, onChange }: PerspectivePaneProps) {
   const options: SelectOption[] = PERSPECTIVES.map((p) => ({
     name: p.label,
-    description: p.id === "hidden" ? "narrative" : "metrics",
+    description: DESCRIPTIONS[p.id] ?? "",
     value: p.id,
   }));
 
   return (
-    <box
-      title="Examination"
-      border
-      borderColor={focused ? ACCENT : NEUTRAL}
-      padding={1}
-      overflow="hidden"
-      style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, minHeight: 0 }}
-    >
-      <select
-        ref={ref}
-        focused={focused}
-        options={options}
-        backgroundColor={TRANSPARENT}
-        focusedBackgroundColor={TRANSPARENT}
-        selectedBackgroundColor={CURSOR_BG}
-        selectedTextColor={ACCENT}
-        showDescription
-        style={{ flexGrow: 1 }}
-        onChange={(i: number) => onChange(i)}
-      />
-    </box>
+    <SelectPane title="Examination" focused={focused} options={options} onChange={onChange} />
   );
 }

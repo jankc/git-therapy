@@ -9,7 +9,6 @@ import {
   countFixupChains,
   lineAgeDays,
   localParts,
-  markFixups,
   median,
   relativeStat,
   scanCode,
@@ -533,14 +532,6 @@ describe("classifyChurnMismatch", () => {
   });
   test("trivial but churn below threshold → null", () => {
     expect(classifyChurnMismatch("minor tweak", 100, 100)).toBeNull(); // 200 < 300
-  });
-});
-
-describe("markFixups", () => {
-  test("sets isFixup true on matching subject, false otherwise", () => {
-    const marked = markFixups([ec({ message: "oops typo" }), ec({ message: "add feature" })]);
-    expect(marked[0]!.isFixup).toBe(true);
-    expect(marked[1]!.isFixup).toBe(false);
   });
 });
 

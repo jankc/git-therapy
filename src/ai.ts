@@ -308,6 +308,50 @@ export function upsertAnalysisActivity(
   return updated.slice(-limit);
 }
 
+/**
+ * Owns the activity list for one generation attempt: the stable per-attempt ids,
+ * lookups, and upserts that preserve a step's original `startedAt`. Replaces the
+ * hand-built `generation-N-…` id strings and repeated `find(byId)` in the stream.
+ */
+interface ActivityTracker {
+  ids: { waiting: string; reasoning: string; stream: string; finalize: string };
+  get(id: string): AnalysisActivity | undefined;
+  set(
+    id: string,
+    label: string,
+    status: AnalysisActivityStatus,
+    startedAt: number,
+    detail?: string,
+    endedAt?: number,
+  ): void;
+  snapshot(): AnalysisActivity[];
+}
+
+function createActivityTracker(generationAttempt: number): ActivityTracker {
+  let activities: AnalysisActivity[] = [];
+  return {
+    ids: {
+      waiting: `generation-${generationAttempt}-waiting`,
+      reasoning: `generation-${generationAttempt}-reasoning`,
+      stream: `generation-${generationAttempt}-stream`,
+      finalize: `generation-${generationAttempt}-finalize`,
+    },
+    get: (id) => activities.find((activity) => activity.id === id),
+    set: (id, label, status, startedAt, detail, endedAt) => {
+      const existing = activities.find((activity) => activity.id === id);
+      activities = upsertAnalysisActivity(activities, {
+        id,
+        label,
+        status,
+        startedAt: existing?.startedAt ?? startedAt,
+        endedAt,
+        detail,
+      });
+    },
+    snapshot: () => [...activities],
+  };
+}
+
 /** The provider cycle order (built-ins plus any config providers). */
 export function providerOrder(): ProviderId[] {
   return registry().order;
@@ -522,7 +566,7 @@ export async function generateAnalysis(
     );
   }
   const generationAttempt = 1;
-  let activities: AnalysisActivity[] = [];
+  const tracker = createActivityTracker(generationAttempt);
   let markdown = "";
   let textChars = 0;
   let reasoningChars = 0;
@@ -535,7 +579,7 @@ export async function generateAnalysis(
     onProgress?.({
       approxOutputTokens: estimateTokens(textChars),
       approxReasoningTokens: estimateTokens(reasoningChars),
-      activities: [...activities],
+      activities: tracker.snapshot(),
       markdown,
     });
   };
@@ -549,16 +593,16 @@ export async function generateAnalysis(
     endedAt?: number,
     force: boolean = true,
   ) => {
-    const existing = activities.find((activity) => activity.id === id);
-    activities = upsertAnalysisActivity(activities, {
-      id,
-      label,
-      status,
-      startedAt: existing?.startedAt ?? startedAt,
-      endedAt,
-      detail,
-    });
+    tracker.set(id, label, status, startedAt, detail, endedAt);
     publishProgress(force);
+  };
+
+  // Flip the "waiting" step to done the first time the model emits anything.
+  const markFirstEvent = (attemptStartedAt: number, now: number, detail: string) => {
+    const waiting = tracker.get(tracker.ids.waiting);
+    if (!waiting || waiting.status === "active") {
+      setActivity(tracker.ids.waiting, "First model event", "done", attemptStartedAt, detail, now, false);
+    }
   };
 
   const model = buildModel(
@@ -622,23 +666,11 @@ export async function generateAnalysis(
     abortSignal: signal,
     onChunk: ({ chunk }) => {
       const now = Date.now();
-      const waitingId = `generation-${generationAttempt}-waiting`;
       if (chunk.type === "reasoning-delta") {
         reasoningChars += chunk.text.length;
-        const waiting = activities.find((activity) => activity.id === waitingId);
-        if (!waiting || waiting.status === "active") {
-          setActivity(
-            waitingId,
-            "First model event",
-            "done",
-            attemptStartedAt,
-            `reasoning began after ${formatDuration(now - attemptStartedAt)}`,
-            now,
-            false,
-          );
-        }
+        markFirstEvent(attemptStartedAt, now, `reasoning began after ${formatDuration(now - attemptStartedAt)}`);
         setActivity(
-          `generation-${generationAttempt}-reasoning`,
+          tracker.ids.reasoning,
           "Model reasoning",
           "active",
           now,
@@ -649,21 +681,8 @@ export async function generateAnalysis(
       } else if (chunk.type === "text-delta") {
         markdown += chunk.text;
         textChars = markdown.length;
-        const waiting = activities.find((activity) => activity.id === waitingId);
-        if (!waiting || waiting.status === "active") {
-          setActivity(
-            waitingId,
-            "First model event",
-            "done",
-            attemptStartedAt,
-            `answer began after ${formatDuration(now - attemptStartedAt)}`,
-            now,
-            false,
-          );
-        }
-        const reasoning = activities.find(
-          (activity) => activity.id === `generation-${generationAttempt}-reasoning`,
-        );
+        markFirstEvent(attemptStartedAt, now, `answer began after ${formatDuration(now - attemptStartedAt)}`);
+        const reasoning = tracker.get(tracker.ids.reasoning);
         if (reasoning?.status === "active") {
           setActivity(
             reasoning.id,
@@ -675,13 +694,11 @@ export async function generateAnalysis(
             false,
           );
         }
-        const stream = activities.find(
-          (activity) => activity.id === `generation-${generationAttempt}-stream`,
-        );
+        const stream = tracker.get(tracker.ids.stream);
         const streamStartedAt = stream?.startedAt ?? now;
         const elapsedSeconds = Math.max(0.001, (now - streamStartedAt) / 1000);
         setActivity(
-          `generation-${generationAttempt}-stream`,
+          tracker.ids.stream,
           "Answer streaming",
           "active",
           streamStartedAt,
@@ -696,7 +713,7 @@ export async function generateAnalysis(
     },
   });
   setActivity(
-    `generation-${generationAttempt}-waiting`,
+    tracker.ids.waiting,
     "First model event",
     "active",
     attemptStartedAt,
@@ -712,9 +729,7 @@ export async function generateAnalysis(
   publishProgress();
 
   const streamEndedAt = Date.now();
-  const waiting = activities.find(
-    (activity) => activity.id === `generation-${generationAttempt}-waiting`,
-  );
+  const waiting = tracker.get(tracker.ids.waiting);
   if (waiting?.status === "active") {
     setActivity(
       waiting.id,
@@ -725,11 +740,8 @@ export async function generateAnalysis(
       streamEndedAt,
     );
   }
-  for (const id of [
-    `generation-${generationAttempt}-reasoning`,
-    `generation-${generationAttempt}-stream`,
-  ]) {
-    const activity = activities.find((candidate) => candidate.id === id);
+  for (const id of [tracker.ids.reasoning, tracker.ids.stream]) {
+    const activity = tracker.get(id);
     if (activity?.status === "active") {
       setActivity(
         id,
@@ -746,7 +758,7 @@ export async function generateAnalysis(
 
   const finalizingStartedAt = Date.now();
   setActivity(
-    `generation-${generationAttempt}-finalize`,
+    tracker.ids.finalize,
     "Usage and cost",
     "active",
     finalizingStartedAt,
@@ -768,7 +780,7 @@ export async function generateAnalysis(
   const costUsd = typeof reportedCost === "number" ? reportedCost : undefined;
   const finalizingEndedAt = Date.now();
   setActivity(
-    `generation-${generationAttempt}-finalize`,
+    tracker.ids.finalize,
     "Usage and cost",
     "done",
     finalizingStartedAt,

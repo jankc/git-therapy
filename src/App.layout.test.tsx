@@ -190,10 +190,17 @@ describe("App terminal layout", () => {
   });
 
   test("toggles the Symptoms pane to a compact evidence summary", async () => {
+    const code = leftRows(await renderRows(24), 24);
     const compact = leftRows(await renderRows(24, 0, true), 24);
     const expanded = leftRows(await renderRows(40, 0, true), 40);
 
+    expect(code.some((row) => row.includes("src/App.tsx"))).toBe(false);
     expect(compact.some((row) => row.includes("Code | [Evidence]"))).toBe(true);
+    expect(compact.some((row) => row.includes("Examined file: src/App.tsx"))).toBe(true);
+    expect(expanded.some((row) => row.includes("Examined file: src/App.tsx"))).toBe(true);
+    const pathRow = compact.findIndex((row) => row.includes("Examined file: src/App.tsx"));
+    const suspectRow = compact.findIndex((row) => row.includes("Selected suspect"));
+    expect(suspectRow - pathRow).toBe(2);
     expect(compact.some((row) => row.includes("10 owned lines"))).toBe(true);
     expect(compact.some((row) => row.includes("Mental & Emotional"))).toBe(true);
     expect(expanded.some((row) => row.includes("git blame --line-porcelain"))).toBe(true);

@@ -1,9 +1,6 @@
 import { TextAttributes } from "@opentui/core";
 import { marked, type Token, type Tokens } from "marked";
-
-const ACCENT = "#A6E22E";
-const DIM = "#9CA3AF";
-const FG = "#E5E7EB";
+import { ACCENT, DIM, FG } from "./theme";
 
 function inlineNodes(tokens: Token[] | undefined, keyPrefix: string): React.ReactNode[] {
   if (!tokens) return [];

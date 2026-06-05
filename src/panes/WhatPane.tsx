@@ -1,6 +1,5 @@
 // The source pane: each scoped line prefixed with a git-blame gutter.
 
-import { useEffect, useRef } from "react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import type { Perspective } from "../perspectives";
 import type {
@@ -8,10 +7,8 @@ import type {
   BlameLine,
   EvidenceCollectionSummary,
 } from "../types";
-
-const NEUTRAL = "#4B5563";
-const ACCENT = "#A6E22E";
-const GUTTER = "#6B7280";
+import { ACCENT, GUTTER, NEUTRAL } from "./theme";
+import { useFocusRef } from "./useFocusRef";
 
 function initials(name: string): string {
   return name
@@ -45,11 +42,13 @@ function fmtDuration(ms: number): string {
 }
 
 function EvidenceView({
+  file,
   authors,
   summary,
   selectedAuthor,
   perspective,
 }: {
+  file: string;
   authors: AuthorEvidence[];
   summary: EvidenceCollectionSummary;
   selectedAuthor: AuthorEvidence | null;
@@ -66,6 +65,12 @@ function EvidenceView({
 
   return (
     <box flexDirection="column">
+      <box marginBottom={1}>
+        <text>
+          <span attributes={TextAttributes.BOLD}>Examined file: </span>
+          {file}
+        </text>
+      </box>
       <text attributes={TextAttributes.BOLD}>Selected suspect</text>
       {selectedAuthor ? (
         <>
@@ -124,16 +129,12 @@ export function WhatPane({
 }: WhatPaneProps) {
   // Match lines to the suspect the same way evidence buckets them (evidence.ts).
   const selectedKey = selectedAuthor?.author.email || selectedAuthor?.author.name || null;
-  const ref = useRef<ScrollBoxRenderable>(null);
   // Imperatively grab keyboard focus so arrow keys scroll this pane.
-  useEffect(() => {
-    if (focused) ref.current?.focus();
-  }, [focused]);
+  const ref = useFocusRef<ScrollBoxRenderable>(focused);
 
   return (
     <box
       title={`Symptoms · ${view === "code" ? "[Code] | Evidence" : "Code | [Evidence]"} [v]`}
-      bottomTitle={view === "code" ? file : `${evidenceSummary.scopedLines} lines · ${evidenceSummary.historyCommits} commits`}
       border
       borderColor={focused ? ACCENT : NEUTRAL}
       padding={1}
@@ -143,6 +144,7 @@ export function WhatPane({
       <scrollbox ref={ref} focused={focused} style={{ flexGrow: 1 }}>
         {view === "evidence" ? (
           <EvidenceView
+            file={file}
             authors={authors}
             summary={evidenceSummary}
             selectedAuthor={selectedAuthor}

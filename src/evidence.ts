@@ -230,11 +230,6 @@ export function classifyChurnMismatch(
   return null;
 }
 
-/** Return a new array with `isFixup` set per commit based on subject wording. */
-export function markFixups(commits: EvidenceCommit[]): EvidenceCommit[] {
-  return commits.map((c) => ({ ...c, isFixup: FIXUP_RE.test(c.message) }));
-}
-
 /** Count maximal consecutive fixup runs of length ≥ 2 and total fixup commits. */
 export function countFixupChains(commits: EvidenceCommit[]): {
   fixupChainCount: number;

@@ -95,10 +95,39 @@ function comparativeStanding(e: AuthorEvidence, metrics: ComparisonMetric[]): st
   return `COMPARATIVE STANDING: ${standings.join("; ")}`;
 }
 
-function mentalEvidence(e: AuthorEvidence): string {
+// Each lens is one row: a task line, a lens-specific signals header + payload,
+// the comparison metrics it cares about, and either a metric template (the common
+// case) or a bespoke narrative system prompt (`hidden`). The five near-identical
+// evidence builders collapse into `buildLensEvidence`.
+interface LensSpec {
+  id: string;
+  label: string;
+  /** The buildPrompt lead-in instruction. */
+  task: string;
+  /** The "<LENS> SIGNALS — …" label preceding the JSON payload. */
+  signalsHeader: string;
+  /** Lens-specific derived/baseline/commit fields, JSON-stringified verbatim. */
+  signals: (e: AuthorEvidence) => Record<string, unknown>;
+  comparison: ComparisonMetric[];
+  /** `metrics` → metricsInstruction(label, …); `narrative` → raw system prompt. */
+  prompt: { metrics: ReportMetric[] } | { narrative: string };
+}
+
+function buildLensEvidence(e: AuthorEvidence, spec: LensSpec): string {
   return (
     `${coreEvidence(e)}\n` +
-    `MENTAL-LENS DERIVED SIGNALS — sessions/night-owl/profanity/intensity: ${JSON.stringify({
+    `${spec.signalsHeader}: ${JSON.stringify(spec.signals(e))}\n` +
+    `${comparativeStanding(e, spec.comparison)}`
+  );
+}
+
+const LENSES: LensSpec[] = [
+  {
+    id: "mental",
+    label: "Mental & Emotional State",
+    task: "Infer this author's mental and emotional state while writing this code.",
+    signalsHeader: "MENTAL-LENS DERIVED SIGNALS — sessions/night-owl/profanity/intensity",
+    signals: (e) => ({
       sessionCount: e.derived.sessionCount,
       longestSessionMinutes: e.derived.longestSessionMinutes,
       longestSessionCommits: e.derived.longestSessionCommits,
@@ -115,20 +144,49 @@ function mentalEvidence(e: AuthorEvidence): string {
         allCapsTokens: e.derived.codeScan.allCapsTokens,
         profanity: e.derived.codeScan.profanity,
       },
-    })}\n` +
-    `${comparativeStanding(e, [
-      "nightOwlRatio",
-      "avgCommitsPerSession",
-      "longestSessionMinutes",
-      "fixupCommitCount",
-    ])}`
-  );
-}
-
-function skillEvidence(e: AuthorEvidence): string {
-  return (
-    `${coreEvidence(e)}\n` +
-    `SKILL-LENS DERIVED SIGNALS — code shape/age/fixups: ${JSON.stringify({
+    }),
+    comparison: ["nightOwlRatio", "avgCommitsPerSession", "longestSessionMinutes", "fixupCommitCount"],
+    prompt: {
+      metrics: [
+        {
+          name: "Mood",
+          valueFormat: "<short qualitative label>",
+          meaning: "the dominant apparent working mood",
+        },
+        {
+          name: "Stress level",
+          valueFormat: "<low | moderate | high | acute>",
+          meaning: "the apparent intensity of stress",
+        },
+        {
+          name: "Inferred sleep debt",
+          valueFormat: "<integer> hours",
+          meaning: "a rough accumulated sleep deficit, rounded to the nearest whole hour",
+        },
+        {
+          name: "Caffeine probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that caffeine influenced this work session",
+        },
+        {
+          name: "Hangover probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that a hangover influenced this work session",
+        },
+        {
+          name: "Author confidence",
+          valueFormat: "<low | moderate | high>",
+          meaning: "the author's apparent decisiveness and certainty while making these changes",
+        },
+      ],
+    },
+  },
+  {
+    id: "skill",
+    label: "Skill & Experience",
+    task: "Estimate this author's skill and experience from the evidence.",
+    signalsHeader: "SKILL-LENS DERIVED SIGNALS — code shape/age/fixups",
+    signals: (e) => ({
       oldestLineAgeDays: e.derived.oldestLineAgeDays,
       newestLineAgeDays: e.derived.newestLineAgeDays,
       avgCommitsPerSession: e.derived.avgCommitsPerSession,
@@ -142,21 +200,44 @@ function skillEvidence(e: AuthorEvidence): string {
         maxNestingDepth: e.derived.codeScan.maxNestingDepth,
         maxLineLength: e.derived.codeScan.maxLineLength,
       },
-    })}\n` +
-    `${comparativeStanding(e, [
-      "linesAuthored",
-      "totalFileCommits",
-      "avgMessageLength",
-      "churnPerCommit",
-      "fixupCommitCount",
-    ])}`
-  );
-}
-
-function contextEvidence(e: AuthorEvidence): string {
-  return (
-    `${coreEvidence(e)}\n` +
-    `CONTEXT-LENS DERIVED SIGNALS — committer divergence/weekend ratio/land-delay/commit body: ${JSON.stringify({
+    }),
+    comparison: ["linesAuthored", "totalFileCommits", "avgMessageLength", "churnPerCommit", "fixupCommitCount"],
+    prompt: {
+      metrics: [
+        {
+          name: "Inferred experience",
+          valueFormat: "<integer> years",
+          meaning: "a rough whole-year estimate of professional programming experience",
+        },
+        {
+          name: "Prior-language influence",
+          valueFormat: "<language or none detected>",
+          meaning: "the strongest programming-language habit visible in this code",
+        },
+        {
+          name: "Docs-read probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that the author consulted primary documentation",
+        },
+        {
+          name: "Community-answer reliance",
+          valueFormat: "<low | moderate | high | unclear>",
+          meaning: "the apparent reliance on Stack Overflow or similar community answers",
+        },
+        {
+          name: "Understanding vs passing tests",
+          valueFormat: "<understanding integer>:<passing-tests integer>",
+          meaning: "the balance between conceptual understanding and merely satisfying tests",
+        },
+      ],
+    },
+  },
+  {
+    id: "context",
+    label: "Context & Circumstances",
+    task: "Infer the external circumstances surrounding this author's work.",
+    signalsHeader: "CONTEXT-LENS DERIVED SIGNALS — committer divergence/weekend ratio/land-delay/commit body",
+    signals: (e) => ({
       weekendRatio: e.derived.weekendRatio,
       totalFileCommits: e.authorBaseline.totalFileCommits,
       avgMessageLength: e.authorBaseline.avgMessageLength,
@@ -175,40 +256,75 @@ function contextEvidence(e: AuthorEvidence): string {
         subjectChurnMismatch: commit.subjectChurnMismatch,
       })),
       commitBodyNote: "No separate commit-body field is present in AuthorEvidence; do not invent body text.",
-    })}\n` +
-    `${comparativeStanding(e, [
-      "weekendRatio",
-      "avgMessageLength",
-      "totalFileCommits",
-      "churnPerCommit",
-    ])}`
-  );
-}
-
-function hiddenEvidence(e: AuthorEvidence): string {
-  return (
-    `${coreEvidence(e)}\n` +
-    `NARRATIVE-LENS SIGNALS — age/fixups/tokens/comparison: ${JSON.stringify({
+    }),
+    comparison: ["weekendRatio", "avgMessageLength", "totalFileCommits", "churnPerCommit"],
+    prompt: {
+      metrics: [
+        {
+          name: "Time pressure",
+          valueFormat: "<low | moderate | high | acute>",
+          meaning: "the apparent urgency surrounding the work",
+        },
+        {
+          name: "On-a-call probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that the author was simultaneously on a call",
+        },
+        {
+          name: "Day-before-vacation probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that imminent leave shaped the work",
+        },
+        {
+          name: "Resignation-coding probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that disengagement or impending departure shaped the work",
+        },
+        {
+          name: "Manager-present probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that a manager was directly observing or pressuring the author",
+        },
+      ],
+    },
+  },
+  {
+    id: "hidden",
+    label: "Hidden Narratives",
+    task: "Reconstruct the hidden narratives behind this author's code.",
+    signalsHeader: "NARRATIVE-LENS SIGNALS — age/fixups/tokens/comparison",
+    signals: (e) => ({
       oldestLineAgeDays: e.derived.oldestLineAgeDays,
       newestLineAgeDays: e.derived.newestLineAgeDays,
       fixupChainCount: e.derived.fixupChainCount,
       fixupCommitCount: e.derived.fixupCommitCount,
       codeScan: e.derived.codeScan,
       wordFrequencies: e.authorBaseline.wordFrequencies,
-    })}\n` +
-    `${comparativeStanding(e, [
-      "linesAuthored",
-      "totalFileCommits",
-      "avgMessageLength",
-      "churnPerCommit",
-    ])}`
-  );
-}
-
-function ghostwriterEvidence(e: AuthorEvidence): string {
-  return (
-    `${coreEvidence(e)}\n` +
-    `GHOSTWRITER-LENS DERIVED SIGNALS — naming/uniformity and AI-assist trailer evidence: ${JSON.stringify({
+    }),
+    comparison: ["linesAuthored", "totalFileCommits", "avgMessageLength", "churnPerCommit"],
+    prompt: {
+      narrative:
+        `${PERSONA}\n\n` +
+        `Write exactly these Markdown sections in order:\n\n` +
+        `# Hidden Narratives\n\n` +
+        `## The bug being secretly worked around\n<One evidence-grounded paragraph.>\n\n` +
+        `## The previous author this code is judging\n<One evidence-grounded paragraph.>\n\n` +
+        `## The age of 'temporary'\n<One evidence-grounded paragraph.>\n\n` +
+        `## What was deleted from the comment before committing\n<One evidence-grounded paragraph.>\n\n` +
+        `Each paragraph MUST cite a concrete datum from the supplied git data.`,
+    },
+  },
+  {
+    id: "ghostwriter",
+    label: "The Ghostwriter",
+    task:
+      `Estimate the probability that an AI coding assistant (e.g. Copilot, ChatGPT, Claude) ` +
+      `wrote this code, and the stylistic tells behind that judgment. Higher means more ` +
+      `machine-authored. Weigh signals such as suspiciously uniform formatting, defensively ` +
+      `complete error handling, textbook-explanatory comments, conventional-but-bland naming, ` +
+      `and large polished additions landed in a single commit.`,
+    signalsHeader: "GHOSTWRITER-LENS DERIVED SIGNALS — naming/uniformity and AI-assist trailer evidence",
+    signals: (e) => ({
       namingAndUniformity: {
         allCapsTokens: e.derived.codeScan.allCapsTokens,
         magicNumbers: e.derived.codeScan.magicNumbers,
@@ -227,174 +343,48 @@ function ghostwriterEvidence(e: AuthorEvidence): string {
       })),
       aiAssistTrailerNote:
         "No AI-assist trailer list is present in AuthorEvidence; only cite assistant/bot tokens if they appear in supplied messages or code.",
-    })}\n` +
-    `${comparativeStanding(e, [
-      "linesAuthored",
-      "avgMessageLength",
-      "totalFileCommits",
-      "churnPerCommit",
-    ])}`
-  );
-}
-
-export const PERSPECTIVES: Perspective[] = [
-  {
-    id: "mental",
-    label: "Mental & Emotional State",
-    system: metricsInstruction("Mental & Emotional State", [
-      {
-        name: "Mood",
-        valueFormat: "<short qualitative label>",
-        meaning: "the dominant apparent working mood",
-      },
-      {
-        name: "Stress level",
-        valueFormat: "<low | moderate | high | acute>",
-        meaning: "the apparent intensity of stress",
-      },
-      {
-        name: "Inferred sleep debt",
-        valueFormat: "<integer> hours",
-        meaning: "a rough accumulated sleep deficit, rounded to the nearest whole hour",
-      },
-      {
-        name: "Caffeine probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that caffeine influenced this work session",
-      },
-      {
-        name: "Hangover probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that a hangover influenced this work session",
-      },
-      {
-        name: "Author confidence",
-        valueFormat: "<low | moderate | high>",
-        meaning: "the author's apparent decisiveness and certainty while making these changes",
-      },
-    ]),
-    buildPrompt: (e) =>
-      `Infer this author's mental and emotional state while writing this code.\n\n${mentalEvidence(e)}`,
-  },
-  {
-    id: "skill",
-    label: "Skill & Experience",
-    system: metricsInstruction("Skill & Experience", [
-      {
-        name: "Inferred experience",
-        valueFormat: "<integer> years",
-        meaning: "a rough whole-year estimate of professional programming experience",
-      },
-      {
-        name: "Prior-language influence",
-        valueFormat: "<language or none detected>",
-        meaning: "the strongest programming-language habit visible in this code",
-      },
-      {
-        name: "Docs-read probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that the author consulted primary documentation",
-      },
-      {
-        name: "Community-answer reliance",
-        valueFormat: "<low | moderate | high | unclear>",
-        meaning: "the apparent reliance on Stack Overflow or similar community answers",
-      },
-      {
-        name: "Understanding vs passing tests",
-        valueFormat: "<understanding integer>:<passing-tests integer>",
-        meaning: "the balance between conceptual understanding and merely satisfying tests",
-      },
-    ]),
-    buildPrompt: (e) =>
-      `Estimate this author's skill and experience from the evidence.\n\n${skillEvidence(e)}`,
-  },
-  {
-    id: "context",
-    label: "Context & Circumstances",
-    system: metricsInstruction("Context & Circumstances", [
-      {
-        name: "Time pressure",
-        valueFormat: "<low | moderate | high | acute>",
-        meaning: "the apparent urgency surrounding the work",
-      },
-      {
-        name: "On-a-call probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that the author was simultaneously on a call",
-      },
-      {
-        name: "Day-before-vacation probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that imminent leave shaped the work",
-      },
-      {
-        name: "Resignation-coding probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that disengagement or impending departure shaped the work",
-      },
-      {
-        name: "Manager-present probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that a manager was directly observing or pressuring the author",
-      },
-    ]),
-    buildPrompt: (e) =>
-      `Infer the external circumstances surrounding this author's work.\n\n${contextEvidence(e)}`,
-  },
-  {
-    id: "hidden",
-    label: "Hidden Narratives",
-    system:
-      `${PERSONA}\n\n` +
-      `Write exactly these Markdown sections in order:\n\n` +
-      `# Hidden Narratives\n\n` +
-      `## The bug being secretly worked around\n<One evidence-grounded paragraph.>\n\n` +
-      `## The previous author this code is judging\n<One evidence-grounded paragraph.>\n\n` +
-      `## The age of 'temporary'\n<One evidence-grounded paragraph.>\n\n` +
-      `## What was deleted from the comment before committing\n<One evidence-grounded paragraph.>\n\n` +
-      `Each paragraph MUST cite a concrete datum from the supplied git data.`,
-    buildPrompt: (e) =>
-      `Reconstruct the hidden narratives behind this author's code.\n\n${hiddenEvidence(e)}`,
-  },
-  {
-    id: "ghostwriter",
-    label: "The Ghostwriter",
-    system: metricsInstruction("The Ghostwriter", [
-      {
-        name: "AI-authored probability",
-        valueFormat: "<integer>%",
-        meaning: "the probability that an AI coding assistant authored substantial parts of the code",
-      },
-      {
-        name: "Boilerplate density",
-        valueFormat: "<integer>%",
-        meaning: "the estimated share of the supplied code that is conventional boilerplate",
-      },
-      {
-        name: "Comment uniformity",
-        valueFormat: "<low | moderate | high | unclear>",
-        meaning: "how stylistically uniform the comments are",
-      },
-      {
-        name: "Naming blandness",
-        valueFormat: "<low | moderate | high>",
-        meaning: "how generic and conventional the identifiers appear",
-      },
-      {
-        name: "Error-handling thoroughness",
-        valueFormat: "<minimal | uneven | thorough | exhaustive>",
-        meaning: "the completeness of defensive and failure-path handling",
-      },
-    ]),
-    buildPrompt: (e) =>
-      `Estimate the probability that an AI coding assistant (e.g. Copilot, ChatGPT, Claude) ` +
-      `wrote this code, and the stylistic tells behind that judgment. Higher means more ` +
-      `machine-authored. Weigh signals such as suspiciously uniform formatting, defensively ` +
-      `complete error handling, textbook-explanatory comments, conventional-but-bland naming, ` +
-      `and large polished additions landed in a single commit.\n\n${ghostwriterEvidence(e)}`,
+    }),
+    comparison: ["linesAuthored", "avgMessageLength", "totalFileCommits", "churnPerCommit"],
+    prompt: {
+      metrics: [
+        {
+          name: "AI-authored probability",
+          valueFormat: "<integer>%",
+          meaning: "the probability that an AI coding assistant authored substantial parts of the code",
+        },
+        {
+          name: "Boilerplate density",
+          valueFormat: "<integer>%",
+          meaning: "the estimated share of the supplied code that is conventional boilerplate",
+        },
+        {
+          name: "Comment uniformity",
+          valueFormat: "<low | moderate | high | unclear>",
+          meaning: "how stylistically uniform the comments are",
+        },
+        {
+          name: "Naming blandness",
+          valueFormat: "<low | moderate | high>",
+          meaning: "how generic and conventional the identifiers appear",
+        },
+        {
+          name: "Error-handling thoroughness",
+          valueFormat: "<minimal | uneven | thorough | exhaustive>",
+          meaning: "the completeness of defensive and failure-path handling",
+        },
+      ],
+    },
   },
 ];
+
+export const PERSPECTIVES: Perspective[] = LENSES.map((spec) => ({
+  id: spec.id,
+  label: spec.label,
+  system: "narrative" in spec.prompt
+    ? spec.prompt.narrative
+    : metricsInstruction(spec.label, spec.prompt.metrics),
+  buildPrompt: (e) => `${spec.task}\n\n${buildLensEvidence(e, spec)}`,
+}));
 
 export function getPerspective(index: number): Perspective {
   return PERSPECTIVES[index] ?? PERSPECTIVES[0]!;

@@ -4,12 +4,7 @@
 
 import { TextAttributes } from "@opentui/core";
 import type { ModelSelection } from "../ai";
-
-const NEUTRAL = "#4B5563";
-const ACCENT = "#A6E22E";
-const DIM = "#9CA3AF";
-const KEY_OK = "#A6E22E";
-const KEY_MISSING = "#F87171";
+import { ACCENT, DIM, KEY_MISSING, KEY_OK, NEUTRAL } from "./theme";
 
 interface ModelPaneProps {
   selection: ModelSelection;

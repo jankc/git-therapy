@@ -1,6 +1,6 @@
 // The analysis pane: keeps run diagnostics above a streamed Markdown report.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import type { Perspective } from "../perspectives";
 import type { Language } from "../ai";
@@ -10,12 +10,9 @@ import type {
   AnalysisProgress,
   AnalysisState,
 } from "../types";
+import { ACCENT, DIM, ERROR, FG, NEUTRAL } from "./theme";
+import { useFocusRef } from "./useFocusRef";
 
-const NEUTRAL = "#4B5563";
-const ACCENT = "#A6E22E";
-const DIM = "#9CA3AF";
-const ERROR = "#F87171";
-const FG = "#E5E7EB";
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
 // Cycled through while a run is in flight, in place of a plain "analyzing".
@@ -80,7 +77,9 @@ function fmtCost(costUsd: number): string {
 
 function fmtElapsed(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+  return s < 60
+    ? `${s}s`
+    : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
 }
 
 function activityDuration(activity: AnalysisActivity, now: number): string {
@@ -100,9 +99,17 @@ function ActivityLog({
     <box flexDirection="column" marginTop={1}>
       {visible.map((activity) => {
         const glyph =
-          activity.status === "active" ? "·" : activity.status === "done" ? "✓" : "×";
+          activity.status === "active"
+            ? "·"
+            : activity.status === "done"
+              ? "✓"
+              : "×";
         const color =
-          activity.status === "error" ? ERROR : activity.status === "active" ? ACCENT : DIM;
+          activity.status === "error"
+            ? ERROR
+            : activity.status === "active"
+              ? ACCENT
+              : DIM;
         return (
           <text key={activity.id} fg={color}>
             {glyph} {activity.label} · {activity.detail ?? activity.status} ·{" "}
@@ -123,37 +130,28 @@ interface ActiveAnalysis {
 
 function Spinner({
   analysis,
-  tokens,
   progress,
   startedAt,
 }: {
   analysis: ActiveAnalysis;
-  tokens: number;
   progress: AnalysisProgress;
   startedAt: number;
 }) {
   const [frame, setFrame] = useState(0);
-  // Derive elapsed seconds from the absolute start time so it stays correct
-  // across remounts (switching lens away and back) instead of resetting to 0.
-  const [secs, setSecs] = useState(() => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
   // The message advances roughly every 5s; seed from startedAt so a fresh run
   // doesn't always open on the same word.
   const [msgIndex, setMsgIndex] = useState(() => Math.floor(startedAt / 5000));
   useEffect(() => {
     const tick = setInterval(() => setFrame((f) => f + 1), 100);
-    const clock = setInterval(
-      () => setSecs(Math.max(0, Math.floor((Date.now() - startedAt) / 1000))),
-      1000,
-    );
     const cycle = setInterval(() => setMsgIndex((i) => i + 1), 5000);
     return () => {
       clearInterval(tick);
-      clearInterval(clock);
       clearInterval(cycle);
     };
   }, [startedAt]);
   const glyph = SPINNER[frame % SPINNER.length] ?? "⠋";
-  const message = LOADING_MESSAGES[msgIndex % LOADING_MESSAGES.length] ?? "Analyzing…";
+  const message =
+    LOADING_MESSAGES[msgIndex % LOADING_MESSAGES.length] ?? "Analyzing…";
   return (
     <box flexDirection="column">
       <text fg={ACCENT}>
@@ -161,9 +159,6 @@ function Spinner({
       </text>
       <text fg={DIM}>
         {analysis.lens} · {analysis.model} · {analysis.language}
-      </text>
-      <text fg={DIM}>
-        {secs}s · ~{fmtTokens(tokens)} out · ~{fmtTokens(progress.approxReasoningTokens)} reasoning · Esc cancels
       </text>
       <ActivityLog activities={progress.activities} now={Date.now()} />
     </box>
@@ -194,23 +189,19 @@ function CompletedRun({
         {lens} · {model} · {language}
       </text>
       <text fg={DIM}>
-        {fmtElapsed(elapsedMs)} · ~{fmtTokens(progress.approxOutputTokens)} out · ~
-        {fmtTokens(progress.approxReasoningTokens)} reasoning
+        {fmtElapsed(elapsedMs)} · ~{fmtTokens(progress.approxOutputTokens)} out
+        · ~{fmtTokens(progress.approxReasoningTokens)} reasoning
       </text>
       <ActivityLog activities={progress.activities} now={Date.now()} />
     </box>
   );
 }
 
-function AnalysisMarkdown({
-  content,
-}: {
-  content: string;
-}) {
+function AnalysisMarkdown({ content }: { content: string }) {
   if (!content) return null;
   return (
-    <box marginTop={1} flexDirection="column">
-      <text fg={ACCENT} attributes={TextAttributes.BOLD}>Analysis</text>
+    <box marginTop={1} flexDirection="column" gap={1}>
+      <box border={["top"]} borderColor={NEUTRAL} />
       <MarkdownView content={content} />
     </box>
   );
@@ -240,7 +231,11 @@ function ReadyView({ suspect, lens, model, language }: ReadyProps) {
       <Row label="Language" value={language} />
       <box marginTop={1}>
         <text>
-          Press <span fg={ACCENT} attributes={TextAttributes.BOLD}>Enter</span> to analyze.
+          Press{" "}
+          <span fg={ACCENT} attributes={TextAttributes.BOLD}>
+            Enter
+          </span>{" "}
+          to analyze.
         </text>
       </box>
     </box>
@@ -280,10 +275,7 @@ export function WhyPane({
   sessionTokens,
   sessionCostUsd,
 }: WhyPaneProps) {
-  const ref = useRef<ScrollBoxRenderable>(null);
-  useEffect(() => {
-    if (focused) ref.current?.focus();
-  }, [focused]);
+  const ref = useFocusRef<ScrollBoxRenderable>(focused);
 
   let body: React.ReactNode;
   let footer = "";
@@ -293,7 +285,6 @@ export function WhyPane({
       <box flexDirection="column">
         <Spinner
           analysis={activeAnalysis}
-          tokens={tokens}
           progress={state.progress}
           startedAt={state.startedAt}
         />
@@ -302,7 +293,11 @@ export function WhyPane({
     );
     footer = `${activeAnalysis.lens} · Esc cancel · ~${fmtTokens(tokens)} out · ~${fmtTokens(state.progress.approxReasoningTokens)} reasoning`;
   } else if (!suspect) {
-    body = <text attributes={TextAttributes.DIM}>Select a suspect from the Who pane.</text>;
+    body = (
+      <text attributes={TextAttributes.DIM}>
+        Select a suspect from the Who pane.
+      </text>
+    );
   } else if (fresh && state.status === "error") {
     body = (
       <box flexDirection="column">
@@ -325,7 +320,8 @@ export function WhyPane({
         <AnalysisMarkdown content={state.markdown} />
       </box>
     );
-    const runCost = state.costUsd === undefined ? "" : ` · ${fmtCost(state.costUsd)}`;
+    const runCost =
+      state.costUsd === undefined ? "" : ` · ${fmtCost(state.costUsd)}`;
     const sessionCost =
       sessionCostUsd === null
         ? `${fmtTokens(sessionTokens)} tok`
@@ -333,7 +329,12 @@ export function WhyPane({
     footer = `${fmtTokens(state.usage.total)} tok${runCost} · session ${sessionCost} · ${fmtElapsed(state.elapsedMs)}`;
   } else {
     body = (
-      <ReadyView suspect={suspect} lens={perspective.label} model={model} language={language} />
+      <ReadyView
+        suspect={suspect}
+        lens={perspective.label}
+        model={model}
+        language={language}
+      />
     );
   }
 

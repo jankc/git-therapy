@@ -3,10 +3,7 @@
 
 import { TextAttributes } from "@opentui/core";
 import type { Language } from "../ai";
-
-const NEUTRAL = "#4B5563";
-const ACCENT = "#A6E22E";
-const DIM = "#9CA3AF";
+import { ACCENT, DIM, NEUTRAL } from "./theme";
 
 interface LanguagePaneProps {
   language: Language;
