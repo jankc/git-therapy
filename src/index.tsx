@@ -215,8 +215,6 @@ const evidenceSummary: EvidenceCollectionSummary = {
   ...(repoPassRan ? { repoCollectionMs, repoHistoryCommits } : {}),
 };
 
-console.error(`git-therapy: ${authors.length} author(s), model ${modelLabel(selection)}`);
-
 const renderer = await createCliRenderer();
 
 // Safety net: if the process exits by any path that bypasses renderer.destroy()
