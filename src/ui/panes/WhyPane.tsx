@@ -160,13 +160,6 @@ function Spinner({
       <text fg={DIM}>
         {analysis.lens} · {analysis.model} · {analysis.language}
       </text>
-      {(progress.approxOutputTokens > 0 ||
-        progress.approxReasoningTokens > 0) && (
-        <text fg={DIM}>
-          ~{fmtTokens(progress.approxOutputTokens)} out · ~
-          {fmtTokens(progress.approxReasoningTokens)} reasoning
-        </text>
-      )}
       <ActivityLog activities={progress.activities} now={Date.now()} />
     </box>
   );

@@ -147,8 +147,8 @@ describe("WhyPane analysis diagnostics", () => {
     );
     const output = rows.join("\n");
 
-    expect(output).toContain("~42 out");
-    expect(output).toContain("~120 reasoning");
+    expect(output).not.toContain("~42 out");
+    expect(output).not.toContain("~120 reasoning");
     expect(output).toContain("Prompt assembled");
     expect(output).toContain("waiting for provider/model");
     expect(output).toContain("Partial report");
