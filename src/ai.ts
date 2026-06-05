@@ -121,7 +121,9 @@ export function parseLanguage(input: string): Language {
 function languageInstruction(language: Language): string {
   return (
     `\nWrite the entire report in ${language}, including headings and notes. ` +
-    `Preserve the requested Markdown structure and numeric score syntax.`
+    `Preserve the requested Markdown structure and each metric's semantic value type. ` +
+    `Translate headings, qualitative labels, and written unit names naturally, while keeping percentages as percentages ` +
+    `and ratios as ratios.`
   );
 }
 

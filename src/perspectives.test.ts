@@ -165,30 +165,56 @@ describe("perspective registry", () => {
     expect(prompt).toContain("SCOPE CODE");
   });
 
-  test("every scored system prompt carries the score template and calibrated scale rules", () => {
+  test("every metric system prompt preserves natural formats and calibrated probability rules", () => {
     for (const p of PERSPECTIVES.filter((perspective) => perspective.id !== "hidden")) {
       expect(p.system).toContain(`# ${p.label}`);
-      expect(p.system).toContain("**<integer from 0 to 100>/100**");
       expect(p.system).toContain("## Notes");
-      expect(p.system).toContain("Scale anchors");
-      expect(p.system).toContain("0 means no supporting evidence");
-      expect(p.system).toContain("~50 means weak or ambiguous evidence");
-      expect(p.system).toContain("90+ means multiple converging signals");
-      expect(p.system).toContain("above 75 requires at least two distinct cited data points");
-      expect(p.system).toContain("Sparse evidence (few owned lines or few blamed commits)");
+      expect(p.system).toContain("Do not convert natural units");
+      expect(p.system).toContain('never append "/100"');
+      expect(p.system).toContain("50% means indeterminate");
+      expect(p.system).toContain("toward 50%, not toward 0%");
+      expect(p.system).toContain("above 75% or below 25% require at least two distinct cited data points");
+      expect(p.system).toContain("Ratios must use two non-negative integers that sum to 100");
+      expect(p.system).toContain('use "unclear"');
       expect(p.system).toContain("contradicts a metric's premise");
+      expect(p.system).not.toContain("**<integer from 0 to 100>/100**");
     }
   });
 
   test("hidden prompt omits metric-scale text but retains citation requirement", () => {
     const hidden = PERSPECTIVES.find((p) => p.id === "hidden")!;
 
-    expect(hidden.system).not.toContain("Scale anchors");
-    expect(hidden.system).not.toContain("0 means no supporting evidence");
-    expect(hidden.system).not.toContain("above 75");
+    expect(hidden.system).not.toContain("50% means indeterminate");
+    expect(hidden.system).not.toContain("above 75%");
     expect(hidden.system).toContain("# Hidden Narratives");
     expect(hidden.system).toContain("## The bug being secretly worked around");
     expect(hidden.system).toContain("Each paragraph MUST cite a concrete datum");
+  });
+
+  test("metric formats match what each value represents", () => {
+    const mental = PERSPECTIVES.find((p) => p.id === "mental")!.system;
+    const skill = PERSPECTIVES.find((p) => p.id === "skill")!.system;
+    const context = PERSPECTIVES.find((p) => p.id === "context")!.system;
+    const ghostwriter = PERSPECTIVES.find((p) => p.id === "ghostwriter")!.system;
+
+    expect(mental).toContain("## Inferred sleep debt — **<integer> hours**");
+    expect(mental).toContain("## Caffeine probability — **<integer>%**");
+    expect(mental).toContain("## Stress level — **<low | moderate | high | acute>**");
+
+    expect(skill).toContain("## Inferred experience — **<integer> years**");
+    expect(skill).toContain("## Prior-language influence — **<language or none detected>**");
+    expect(skill).toContain(
+      "## Understanding vs passing tests — **<understanding integer>:<passing-tests integer>**",
+    );
+
+    expect(context).toContain("## Time pressure — **<low | moderate | high | acute>**");
+    expect(context).toContain("## Resignation-coding probability — **<integer>%**");
+
+    expect(ghostwriter).toContain("## AI-authored probability — **<integer>%**");
+    expect(ghostwriter).toContain("## Boilerplate density — **<integer>%**");
+    expect(ghostwriter).toContain(
+      "## Error-handling thoroughness — **<minimal | uneven | thorough | exhaustive>**",
+    );
   });
 
   test("lens prompts include targeted derived signals plus shared core evidence", () => {

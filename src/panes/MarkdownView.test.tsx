@@ -32,20 +32,20 @@ async function renderMarkdown(content: string) {
 
 describe("MarkdownView", () => {
   test("keeps incomplete streaming Markdown visible", async () => {
-    const frame = await renderMarkdown("## Stress — **90/");
+    const frame = await renderMarkdown("## Inferred experience — **5 ye");
     const output = frame.lines.flatMap((line) => line.spans).map((span) => span.text).join("");
 
-    expect(output).toContain("Stress — **90/");
+    expect(output).toContain("Inferred experience — **5 ye");
   });
 
-  test("highlights a completed score", async () => {
-    const frame = await renderMarkdown("## Stress — **90/100**\nEvidence.");
-    const scoreSpan = frame.lines
+  test("highlights a completed metric value regardless of unit", async () => {
+    const frame = await renderMarkdown("## Inferred experience — **5 years**\nEvidence.");
+    const valueSpan = frame.lines
       .flatMap((line) => line.spans)
-      .find((span) => span.text.includes("90/100"));
+      .find((span) => span.text.includes("5 years"));
 
-    expect(scoreSpan).toBeDefined();
-    expect(scoreSpan!.attributes & TextAttributes.BOLD).toBe(TextAttributes.BOLD);
-    expect(scoreSpan!.fg.toInts()).toEqual([166, 226, 46, 255]);
+    expect(valueSpan).toBeDefined();
+    expect(valueSpan!.attributes & TextAttributes.BOLD).toBe(TextAttributes.BOLD);
+    expect(valueSpan!.fg.toInts()).toEqual([166, 226, 46, 255]);
   });
 });

@@ -140,7 +140,7 @@ describe("WhyPane analysis diagnostics", () => {
           approxOutputTokens: 42,
           approxReasoningTokens: 120,
           activities,
-          markdown: "# Partial report\n\n## Stress — **42/100**\nLine 1.",
+          markdown: "# Partial report\n\n## Caffeine probability — **42%**\nLine 1.",
         },
       },
       { active: true, height: 28 },
@@ -152,7 +152,7 @@ describe("WhyPane analysis diagnostics", () => {
     expect(output).toContain("Prompt assembled");
     expect(output).toContain("waiting for provider/model");
     expect(output).toContain("Partial report");
-    expect(output).toContain("42/100");
+    expect(output).toContain("42%");
   });
 
   test("retains recent diagnostics when analysis fails", async () => {
@@ -181,13 +181,13 @@ describe("WhyPane analysis diagnostics", () => {
       {
         status: "done",
         requestId: 1,
-        markdown: "# Mental State\n\n## Stress — **42/100**\nLine 1.",
+        markdown: "# Mental State\n\n## Caffeine probability — **42%**\nLine 1.",
         usage: { input: 10, output: 5, total: 15 },
         progress: {
           approxOutputTokens: 5,
           approxReasoningTokens: 12,
           activities,
-          markdown: "# Mental State\n\n## Stress — **42/100**\nLine 1.",
+          markdown: "# Mental State\n\n## Caffeine probability — **42%**\nLine 1.",
         },
         generatedAt: 0,
         elapsedMs: 1000,
@@ -199,7 +199,9 @@ describe("WhyPane analysis diagnostics", () => {
     expect(output).toContain("Analysis complete Ada");
     expect(output).toContain("Prompt assembled");
     expect(output).toContain("First model event");
-    expect(output).toContain("Stress");
-    expect(output.indexOf("Prompt assembled")).toBeLessThan(output.indexOf("Stress"));
+    expect(output).toContain("Caffeine probability");
+    expect(output.indexOf("Prompt assembled")).toBeLessThan(
+      output.indexOf("Caffeine probability"),
+    );
   });
 });

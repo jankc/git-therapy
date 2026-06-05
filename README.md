@@ -18,18 +18,20 @@ blamed commits, commit hours, weekday distribution, line ranges, surrounding sou
 context — and presents that evidence to a model under a strict instruction to behave
 like a calm, slightly pretentious lab report and to **cite its sources**.
 
-The verdict streams in as Markdown with highlighted scores and short narrative findings. Every
-claim is, in principle, evidence-based. Whether "Sleep debt: 78 / 100 — three commits
-landed between 02:14 and 03:51, additions outpacing deletions 4:1, consistent with
-caffeinated despair" constitutes *science* is left as an exercise for the user.
+The verdict streams in as Markdown with highlighted measurements and short narrative findings.
+Each metric uses a format that fits the claim: probabilities are percentages, experience is
+reported in years, sleep debt in hours, tradeoffs as ratios, and non-numeric judgments as
+qualitative labels. Every claim is, in principle, evidence-based. Whether "Sleep debt: 5 hours
+— three commits landed between 02:14 and 03:51, additions outpacing deletions 4:1, consistent
+with caffeinated despair" constitutes *science* is left as an exercise for the user.
 
 ## The lenses
 
 Cycle between five perspectives on the same evidence:
 
 - **Mental & Emotional State** — mood, stress, sleep debt, caffeine probability, hangover probability, confidence.
-- **Skill & Experience** — inferred years of experience, prior-language tells, docs-read probability, Stack Overflow ratio, understanding-vs-passing-tests ratio.
-- **Context & Circumstances** — time pressure, on-a-call probability, day-before-vacation energy, resignation-coding score, manager-standing-behind-them score.
+- **Skill & Experience** — inferred experience in years, prior-language influence, docs-read probability, community-answer reliance, understanding-vs-passing-tests ratio.
+- **Context & Circumstances** — time pressure, on-a-call probability, day-before-vacation probability, resignation-coding probability, manager-present probability.
 - **Hidden Narratives** — the bug being secretly worked around, the previous author this code is judging, the age of "temporary," what was deleted from the comment before committing.
 - **The Ghostwriter** — the probability an AI wrote this code, and the stylistic tells behind that judgment.
 

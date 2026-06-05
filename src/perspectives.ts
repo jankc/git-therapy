@@ -10,6 +10,12 @@ export interface Perspective {
   buildPrompt: (e: AuthorEvidence) => string;
 }
 
+interface ReportMetric {
+  name: string;
+  valueFormat: string;
+  meaning: string;
+}
+
 type ComparisonMetric = Exclude<keyof AuthorEvidence["relativeToFile"], "authorCount">;
 
 // The 5-rule contract shared by every perspective.
@@ -24,26 +30,29 @@ const PERSONA =
   "like a lab report. Return ONLY the requested Markdown report: no JSON, no code fences, " +
   "and no preamble or closing commentary outside the template.";
 
-function metricsInstruction(title: string, metricNames: string[]): string {
-  const metricTemplate = metricNames
+function metricsInstruction(title: string, metrics: ReportMetric[]): string {
+  const metricTemplate = metrics
     .map(
-      (name) =>
-        `## ${name} — **<integer from 0 to 100>/100**\n` +
-        `<One concise evidence-grounded interpretation citing concrete supplied facts.>`,
+      ({ name, valueFormat, meaning }) =>
+        `## ${name} — **${valueFormat}**\n` +
+        `<One concise evidence-grounded interpretation of ${meaning}, citing concrete supplied facts.>`,
     )
     .join("\n\n");
 
   return (
     `${PERSONA}\n\n` +
-    `Produce each requested metric exactly once and in the listed order. Each heading must contain a bold integer ` +
-    `score from 0-100 followed by "/100". The paragraph directly below it must cite a concrete datum from the supplied ` +
-    `git data (sha, line number, weekday/hour, word-frequency token, or derived/comparative figure). ` +
-    `Scale anchors: 0 means no supporting evidence, ~50 means weak or ambiguous evidence, ` +
-    `and 90+ means multiple converging signals. Any value above 75 requires at least two distinct cited data points; ` +
-    `lower the value when only one weak signal exists. Sparse evidence (few owned lines or few blamed commits) must ` +
-    `yield low scores plus an explicit thin-evidence note. If evidence contradicts a metric's premise, score it low ` +
-    `and explain the contradiction instead of inventing support. End with an optional "## Notes" section containing ` +
-    `at most 5 short bullets.\n\nUse this exact Markdown structure:\n\n` +
+    `Produce each requested metric exactly once and in the listed order. Replace every angle-bracket placeholder with ` +
+    `one value in the requested format. Do not convert natural units, ratios, or qualitative findings into generic ` +
+    `0-100 scores, and never append "/100". The paragraph directly below each heading must cite a concrete datum from ` +
+    `the supplied git data (sha, line number, weekday/hour, word-frequency token, or derived/comparative figure). ` +
+    `For probabilities, use an integer from 0% to 100%: 0% means effectively ruled out, 50% means indeterminate, and ` +
+    `100% means near-certain. Sparse or ambiguous evidence should pull a probability toward 50%, not toward 0%; values ` +
+    `above 75% or below 25% require at least two distinct cited data points. Percentage densities describe an estimated ` +
+    `share of the supplied code, not confidence. Ratios must use two non-negative integers that sum to 100. Natural-unit ` +
+    `estimates must remain plausible and conservative. Qualitative values must be short, specific labels; use "unclear" ` +
+    `when the evidence cannot support a direction. If evidence contradicts a metric's premise, explain the contradiction ` +
+    `instead of inventing support. End with an optional "## Notes" section containing at most 5 short bullets.\n\n` +
+    `Use this exact Markdown structure:\n\n` +
     `# ${title}\n\n` +
     `${metricTemplate}\n\n## Notes\n- <Optional thin-evidence or contradiction note>`
   );
@@ -233,12 +242,36 @@ export const PERSPECTIVES: Perspective[] = [
     id: "mental",
     label: "Mental & Emotional State",
     system: metricsInstruction("Mental & Emotional State", [
-      "Mood",
-      "Stress level",
-      "Sleep debt",
-      "Caffeine probability",
-      "Hangover probability",
-      "Confidence",
+      {
+        name: "Mood",
+        valueFormat: "<short qualitative label>",
+        meaning: "the dominant apparent working mood",
+      },
+      {
+        name: "Stress level",
+        valueFormat: "<low | moderate | high | acute>",
+        meaning: "the apparent intensity of stress",
+      },
+      {
+        name: "Inferred sleep debt",
+        valueFormat: "<integer> hours",
+        meaning: "a rough accumulated sleep deficit, rounded to the nearest whole hour",
+      },
+      {
+        name: "Caffeine probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that caffeine influenced this work session",
+      },
+      {
+        name: "Hangover probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that a hangover influenced this work session",
+      },
+      {
+        name: "Author confidence",
+        valueFormat: "<low | moderate | high>",
+        meaning: "the author's apparent decisiveness and certainty while making these changes",
+      },
     ]),
     buildPrompt: (e) =>
       `Infer this author's mental and emotional state while writing this code.\n\n${mentalEvidence(e)}`,
@@ -247,11 +280,31 @@ export const PERSPECTIVES: Perspective[] = [
     id: "skill",
     label: "Skill & Experience",
     system: metricsInstruction("Skill & Experience", [
-      "Inferred years of experience",
-      "Prior-language tells",
-      "Docs-read probability",
-      "Stack Overflow ratio",
-      "Understanding-vs-passing-tests ratio",
+      {
+        name: "Inferred experience",
+        valueFormat: "<integer> years",
+        meaning: "a rough whole-year estimate of professional programming experience",
+      },
+      {
+        name: "Prior-language influence",
+        valueFormat: "<language or none detected>",
+        meaning: "the strongest programming-language habit visible in this code",
+      },
+      {
+        name: "Docs-read probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that the author consulted primary documentation",
+      },
+      {
+        name: "Community-answer reliance",
+        valueFormat: "<low | moderate | high | unclear>",
+        meaning: "the apparent reliance on Stack Overflow or similar community answers",
+      },
+      {
+        name: "Understanding vs passing tests",
+        valueFormat: "<understanding integer>:<passing-tests integer>",
+        meaning: "the balance between conceptual understanding and merely satisfying tests",
+      },
     ]),
     buildPrompt: (e) =>
       `Estimate this author's skill and experience from the evidence.\n\n${skillEvidence(e)}`,
@@ -260,11 +313,31 @@ export const PERSPECTIVES: Perspective[] = [
     id: "context",
     label: "Context & Circumstances",
     system: metricsInstruction("Context & Circumstances", [
-      "Time pressure",
-      "On-a-call probability",
-      "Day-before-vacation energy",
-      "Resignation-coding score",
-      "Manager-standing-behind-them score",
+      {
+        name: "Time pressure",
+        valueFormat: "<low | moderate | high | acute>",
+        meaning: "the apparent urgency surrounding the work",
+      },
+      {
+        name: "On-a-call probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that the author was simultaneously on a call",
+      },
+      {
+        name: "Day-before-vacation probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that imminent leave shaped the work",
+      },
+      {
+        name: "Resignation-coding probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that disengagement or impending departure shaped the work",
+      },
+      {
+        name: "Manager-present probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that a manager was directly observing or pressuring the author",
+      },
     ]),
     buildPrompt: (e) =>
       `Infer the external circumstances surrounding this author's work.\n\n${contextEvidence(e)}`,
@@ -288,11 +361,31 @@ export const PERSPECTIVES: Perspective[] = [
     id: "ghostwriter",
     label: "The Ghostwriter",
     system: metricsInstruction("The Ghostwriter", [
-      "AI-authored probability",
-      "Boilerplate density",
-      "Comment uniformity",
-      "Naming blandness",
-      "Error-handling thoroughness",
+      {
+        name: "AI-authored probability",
+        valueFormat: "<integer>%",
+        meaning: "the probability that an AI coding assistant authored substantial parts of the code",
+      },
+      {
+        name: "Boilerplate density",
+        valueFormat: "<integer>%",
+        meaning: "the estimated share of the supplied code that is conventional boilerplate",
+      },
+      {
+        name: "Comment uniformity",
+        valueFormat: "<low | moderate | high | unclear>",
+        meaning: "how stylistically uniform the comments are",
+      },
+      {
+        name: "Naming blandness",
+        valueFormat: "<low | moderate | high>",
+        meaning: "how generic and conventional the identifiers appear",
+      },
+      {
+        name: "Error-handling thoroughness",
+        valueFormat: "<minimal | uneven | thorough | exhaustive>",
+        meaning: "the completeness of defensive and failure-path handling",
+      },
     ]),
     buildPrompt: (e) =>
       `Estimate the probability that an AI coding assistant (e.g. Copilot, ChatGPT, Claude) ` +

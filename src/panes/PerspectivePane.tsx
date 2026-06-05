@@ -25,7 +25,7 @@ export function PerspectivePane({ focused, onChange }: PerspectivePaneProps) {
 
   const options: SelectOption[] = PERSPECTIVES.map((p) => ({
     name: p.label,
-    description: p.id === "hidden" ? "narrative" : "scores",
+    description: p.id === "hidden" ? "narrative" : "metrics",
     value: p.id,
   }));
 
