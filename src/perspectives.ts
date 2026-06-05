@@ -1,41 +1,11 @@
 // The perspective registry: one git evidence input, several prompts, several readings.
-// Most lenses share the metric-bars schema; "Hidden Narratives" uses narrative sections.
+// Every lens emits Markdown so the analysis can render while it is still streaming.
 
-import { z } from "zod";
 import type { AuthorEvidence } from "./types";
-
-export const MetricsSchema = z.object({
-  author: z.string(),
-  metrics: z
-    .array(
-      z.object({
-        name: z.string(),
-        value: z.number().min(0).max(100),
-        evidence: z.string(),
-      }),
-    )
-    .min(3)
-    .max(6),
-  notes: z.array(z.string()).max(5),
-});
-
-export const NarrativeSchema = z.object({
-  sections: z
-    .array(z.object({ heading: z.string(), body: z.string() }))
-    .min(1)
-    .max(6),
-});
-
-export type MetricsResult = z.infer<typeof MetricsSchema>;
-export type NarrativeResult = z.infer<typeof NarrativeSchema>;
-
-export type Renderer = "metric-bars" | "narrative";
 
 export interface Perspective {
   id: string;
   label: string;
-  renderer: Renderer;
-  schema: z.ZodTypeAny;
   system: string;
   buildPrompt: (e: AuthorEvidence) => string;
 }
@@ -51,23 +21,31 @@ const PERSONA =
   "Base claims primarily on BLAMED LINES and BLAMED COMMITS. Use AUTHOR BASELINE only " +
   "for background patterns, never as the sole basis for a claim. " +
   "Invent no facts. Do not joke, wink, or break the fourth wall — the analysis must read " +
-  "like a lab report. Return ONLY a JSON object matching the requested shape: no markdown, " +
-  "no code fences, no prose outside the JSON.";
+  "like a lab report. Return ONLY the requested Markdown report: no JSON, no code fences, " +
+  "and no preamble or closing commentary outside the template.";
 
-function metricsInstruction(metricNames: string[]): string {
+function metricsInstruction(title: string, metricNames: string[]): string {
+  const metricTemplate = metricNames
+    .map(
+      (name) =>
+        `## ${name} — **<integer from 0 to 100>/100**\n` +
+        `<One concise evidence-grounded interpretation citing concrete supplied facts.>`,
+    )
+    .join("\n\n");
+
   return (
     `${PERSONA}\n\n` +
-    `Produce these metrics, each 0-100 with an "evidence" string that quotes a concrete datum ` +
-    `from the supplied git data (sha, line number, weekday/hour, word-frequency token, or derived/comparative figure): ` +
-    `${metricNames.join(", ")}. Scale anchors: 0 means no supporting evidence, ~50 means weak or ambiguous evidence, ` +
+    `Produce each requested metric exactly once and in the listed order. Each heading must contain a bold integer ` +
+    `score from 0-100 followed by "/100". The paragraph directly below it must cite a concrete datum from the supplied ` +
+    `git data (sha, line number, weekday/hour, word-frequency token, or derived/comparative figure). ` +
+    `Scale anchors: 0 means no supporting evidence, ~50 means weak or ambiguous evidence, ` +
     `and 90+ means multiple converging signals. Any value above 75 requires at least two distinct cited data points; ` +
     `lower the value when only one weak signal exists. Sparse evidence (few owned lines or few blamed commits) must ` +
     `yield low scores plus an explicit thin-evidence note. If evidence contradicts a metric's premise, score it low ` +
-    `and note the contradiction instead of inventing support. ` +
-    `Illustrative example only, not data about the analyzed author: ` +
-    `{"name":"Stress level","value":32,"evidence":"Low: line 12 sha abc1234 and nightOwlRatio=0 provide no second high-stress signal"}. ` +
-    `Also include up to 5 short "notes". ` +
-    `Shape: { "author": string, "metrics": [{ "name": string, "value": number, "evidence": string }], "notes": string[] }.`
+    `and explain the contradiction instead of inventing support. End with an optional "## Notes" section containing ` +
+    `at most 5 short bullets.\n\nUse this exact Markdown structure:\n\n` +
+    `# ${title}\n\n` +
+    `${metricTemplate}\n\n## Notes\n- <Optional thin-evidence or contradiction note>`
   );
 }
 
@@ -254,9 +232,7 @@ export const PERSPECTIVES: Perspective[] = [
   {
     id: "mental",
     label: "Mental & Emotional State",
-    renderer: "metric-bars",
-    schema: MetricsSchema,
-    system: metricsInstruction([
+    system: metricsInstruction("Mental & Emotional State", [
       "Mood",
       "Stress level",
       "Sleep debt",
@@ -270,9 +246,7 @@ export const PERSPECTIVES: Perspective[] = [
   {
     id: "skill",
     label: "Skill & Experience",
-    renderer: "metric-bars",
-    schema: MetricsSchema,
-    system: metricsInstruction([
+    system: metricsInstruction("Skill & Experience", [
       "Inferred years of experience",
       "Prior-language tells",
       "Docs-read probability",
@@ -285,9 +259,7 @@ export const PERSPECTIVES: Perspective[] = [
   {
     id: "context",
     label: "Context & Circumstances",
-    renderer: "metric-bars",
-    schema: MetricsSchema,
-    system: metricsInstruction([
+    system: metricsInstruction("Context & Circumstances", [
       "Time pressure",
       "On-a-call probability",
       "Day-before-vacation energy",
@@ -300,24 +272,22 @@ export const PERSPECTIVES: Perspective[] = [
   {
     id: "hidden",
     label: "Hidden Narratives",
-    renderer: "narrative",
-    schema: NarrativeSchema,
     system:
       `${PERSONA}\n\n` +
-      `Produce narrative "sections", each with a "heading" and a "body" paragraph, covering: ` +
-      `"The bug being secretly worked around", "The previous author this code is judging", ` +
-      `"The age of 'temporary'", "What was deleted from the comment before committing". ` +
-      `Each body MUST quote a concrete datum from the supplied git data. ` +
-      `Shape: { "sections": [{ "heading": string, "body": string }] }.`,
+      `Write exactly these Markdown sections in order:\n\n` +
+      `# Hidden Narratives\n\n` +
+      `## The bug being secretly worked around\n<One evidence-grounded paragraph.>\n\n` +
+      `## The previous author this code is judging\n<One evidence-grounded paragraph.>\n\n` +
+      `## The age of 'temporary'\n<One evidence-grounded paragraph.>\n\n` +
+      `## What was deleted from the comment before committing\n<One evidence-grounded paragraph.>\n\n` +
+      `Each paragraph MUST cite a concrete datum from the supplied git data.`,
     buildPrompt: (e) =>
       `Reconstruct the hidden narratives behind this author's code.\n\n${hiddenEvidence(e)}`,
   },
   {
     id: "ghostwriter",
     label: "The Ghostwriter",
-    renderer: "metric-bars",
-    schema: MetricsSchema,
-    system: metricsInstruction([
+    system: metricsInstruction("The Ghostwriter", [
       "AI-authored probability",
       "Boilerplate density",
       "Comment uniformity",

@@ -6,7 +6,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resetRegistryForTests } from "./ai";
+import {
+  createOpenRouterCostMetadataExtractor,
+  createInstrumentedFetch,
+  resetRegistryForTests,
+  upsertAnalysisActivity,
+} from "./ai";
 
 beforeAll(() => {
   const dir = mkdtempSync(join(tmpdir(), "git-therapy-ai-"));
@@ -90,5 +95,98 @@ describe("provider registry (built-ins merged with config)", () => {
     const { parseLanguage } = await import("./ai");
     expect(parseLanguage("czech")).toBe("Czech");
     expect(() => parseLanguage("Klingon")).toThrow();
+  });
+});
+
+describe("OpenRouter cost accounting", () => {
+  test("extracts cost from the final streaming usage chunk", () => {
+    const stream = createOpenRouterCostMetadataExtractor().createStreamExtractor();
+    stream.processChunk({ choices: [{ delta: { content: "hello" } }] });
+    stream.processChunk({ choices: [], usage: { cost: 0.000142 } });
+
+    expect(stream.buildMetadata()).toEqual({
+      openrouter: { costUsd: 0.000142 },
+    });
+  });
+
+  test("ignores missing and malformed costs", async () => {
+    const extractor = createOpenRouterCostMetadataExtractor();
+
+    expect(await extractor.extractMetadata({ parsedBody: { usage: {} } })).toBeUndefined();
+    expect(
+      await extractor.extractMetadata({
+        parsedBody: { usage: { cost: "0.000142" } },
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("analysis activity tracking", () => {
+  test("reports each SDK transport attempt and response timing", async () => {
+    const events: Array<{
+      id: string;
+      status: string;
+      detail: string;
+    }> = [];
+    const fakeFetch = Object.assign(
+      async () => new Response("ok", { status: 200 }),
+      { preconnect: () => {} },
+    ) as typeof fetch;
+    let generationAttempt = 1;
+    const instrumentedFetch = createInstrumentedFetch(
+      fakeFetch,
+      () => generationAttempt,
+      (event) => events.push(event),
+    );
+
+    await instrumentedFetch("https://example.test");
+    generationAttempt = 2;
+    await instrumentedFetch("https://example.test");
+
+    expect(events.map((event) => [event.id, event.status])).toEqual([
+      ["generation-1-http-1", "active"],
+      ["generation-1-http-1", "done"],
+      ["generation-2-http-2", "active"],
+      ["generation-2-http-2", "done"],
+    ]);
+    expect(events[1]?.detail).toMatch(/^HTTP 200 in /);
+  });
+
+  test("updates an existing stage without resetting its position", () => {
+    const initial = [
+      {
+        id: "stream",
+        label: "Answer streaming",
+        status: "active" as const,
+        startedAt: 10,
+        detail: "~1 tok",
+      },
+    ];
+    const updated = upsertAnalysisActivity(initial, {
+      ...initial[0]!,
+      detail: "~20 tok",
+    });
+
+    expect(updated).toHaveLength(1);
+    expect(updated[0]?.detail).toBe("~20 tok");
+  });
+
+  test("keeps only the most recent lifecycle events", () => {
+    let activities: Parameters<typeof upsertAnalysisActivity>[0] = [];
+    for (let i = 0; i < 5; i++) {
+      activities = upsertAnalysisActivity(
+        activities,
+        {
+          id: String(i),
+          label: `stage ${i}`,
+          status: "done",
+          startedAt: i,
+          endedAt: i,
+        },
+        3,
+      );
+    }
+
+    expect(activities.map((activity) => activity.id)).toEqual(["2", "3", "4"]);
   });
 });

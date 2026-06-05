@@ -1,17 +1,21 @@
-// The analysis pane: renders metric bars or narrative sections from the result.
+// The analysis pane: keeps run diagnostics above a streamed Markdown report.
 
 import { useEffect, useRef, useState } from "react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import type { MetricsResult, NarrativeResult, Perspective } from "../perspectives";
+import type { Perspective } from "../perspectives";
 import type { Language } from "../ai";
-import type { AnalysisState } from "../types";
+import { MarkdownView } from "./MarkdownView";
+import type {
+  AnalysisActivity,
+  AnalysisProgress,
+  AnalysisState,
+} from "../types";
 
 const NEUTRAL = "#4B5563";
 const ACCENT = "#A6E22E";
 const DIM = "#9CA3AF";
 const ERROR = "#F87171";
 const FG = "#E5E7EB";
-const BAR_WIDTH = 18;
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
 // Cycled through while a run is in flight, in place of a plain "analyzing".
@@ -70,15 +74,44 @@ function fmtTokens(n: number): string {
   return n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
-function fmtTime(ms: number): string {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+function fmtCost(costUsd: number): string {
+  return `$${costUsd.toFixed(6)}`;
 }
 
 function fmtElapsed(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+}
+
+function activityDuration(activity: AnalysisActivity, now: number): string {
+  return fmtElapsed((activity.endedAt ?? now) - activity.startedAt);
+}
+
+function ActivityLog({
+  activities,
+  now,
+}: {
+  activities: AnalysisActivity[];
+  now: number;
+}) {
+  const visible = activities.slice(-8);
+  if (visible.length === 0) return null;
+  return (
+    <box flexDirection="column" marginTop={1}>
+      {visible.map((activity) => {
+        const glyph =
+          activity.status === "active" ? "·" : activity.status === "done" ? "✓" : "×";
+        const color =
+          activity.status === "error" ? ERROR : activity.status === "active" ? ACCENT : DIM;
+        return (
+          <text key={activity.id} fg={color}>
+            {glyph} {activity.label} · {activity.detail ?? activity.status} ·{" "}
+            {activityDuration(activity, now)}
+          </text>
+        );
+      })}
+    </box>
+  );
 }
 
 interface ActiveAnalysis {
@@ -91,10 +124,12 @@ interface ActiveAnalysis {
 function Spinner({
   analysis,
   tokens,
+  progress,
   startedAt,
 }: {
   analysis: ActiveAnalysis;
   tokens: number;
+  progress: AnalysisProgress;
   startedAt: number;
 }) {
   const [frame, setFrame] = useState(0);
@@ -128,61 +163,55 @@ function Spinner({
         {analysis.lens} · {analysis.model} · {analysis.language}
       </text>
       <text fg={DIM}>
-        {secs}s · ~{fmtTokens(tokens)} tok · Esc cancels
+        {secs}s · ~{fmtTokens(tokens)} out · ~{fmtTokens(progress.approxReasoningTokens)} reasoning · Esc cancels
       </text>
+      <ActivityLog activities={progress.activities} now={Date.now()} />
     </box>
   );
 }
 
-function MetricBar({ name, value, evidence }: { name: string; value: number; evidence: string }) {
-  const clamped = Math.max(0, Math.min(100, value));
-  const filled = Math.round((clamped / 100) * BAR_WIDTH);
+function CompletedRun({
+  suspect,
+  lens,
+  model,
+  language,
+  elapsedMs,
+  progress,
+}: {
+  suspect: string;
+  lens: string;
+  model: string;
+  language: Language;
+  elapsedMs: number;
+  progress: AnalysisProgress;
+}) {
   return (
-    <box flexDirection="column" marginBottom={1}>
-      <text>
-        {name} <span fg={ACCENT}>{clamped}</span>
-      </text>
+    <box flexDirection="column">
       <text fg={ACCENT}>
-        {"█".repeat(filled)}
-        <span fg={NEUTRAL}>{"░".repeat(BAR_WIDTH - filled)}</span>
+        ✓ Analysis complete <span fg={FG}>{suspect}</span>
       </text>
-      <text fg={DIM} attributes={TextAttributes.DIM}>
-        {evidence}
+      <text fg={DIM}>
+        {lens} · {model} · {language}
       </text>
+      <text fg={DIM}>
+        {fmtElapsed(elapsedMs)} · ~{fmtTokens(progress.approxOutputTokens)} out · ~
+        {fmtTokens(progress.approxReasoningTokens)} reasoning
+      </text>
+      <ActivityLog activities={progress.activities} now={Date.now()} />
     </box>
   );
 }
 
-function MetricsView({ result }: { result: MetricsResult }) {
+function AnalysisMarkdown({
+  content,
+}: {
+  content: string;
+}) {
+  if (!content) return null;
   return (
-    <box flexDirection="column">
-      {result.metrics.map((m, i) => (
-        <MetricBar key={i} name={m.name} value={m.value} evidence={m.evidence} />
-      ))}
-      {result.notes.length > 0 && (
-        <box flexDirection="column" marginTop={1}>
-          {result.notes.map((n, i) => (
-            <text key={i} fg={DIM} attributes={TextAttributes.DIM}>
-              · {n}
-            </text>
-          ))}
-        </box>
-      )}
-    </box>
-  );
-}
-
-function NarrativeView({ result }: { result: NarrativeResult }) {
-  return (
-    <box flexDirection="column">
-      {result.sections.map((s, i) => (
-        <box key={i} flexDirection="column" marginBottom={1}>
-          <text fg={ACCENT} attributes={TextAttributes.BOLD}>
-            {s.heading}
-          </text>
-          <text fg={DIM}>{s.body}</text>
-        </box>
-      ))}
+    <box marginTop={1} flexDirection="column">
+      <text fg={ACCENT} attributes={TextAttributes.BOLD}>Analysis</text>
+      <MarkdownView content={content} />
     </box>
   );
 }
@@ -236,6 +265,7 @@ interface WhyPaneProps {
   /** True when `state` reflects the current selection (vs. a stale prior run). */
   fresh: boolean;
   sessionTokens: number;
+  sessionCostUsd: number | null;
 }
 
 export function WhyPane({
@@ -248,6 +278,7 @@ export function WhyPane({
   activeAnalysis,
   fresh,
   sessionTokens,
+  sessionCostUsd,
 }: WhyPaneProps) {
   const ref = useRef<ScrollBoxRenderable>(null);
   useEffect(() => {
@@ -257,21 +288,49 @@ export function WhyPane({
   let body: React.ReactNode;
   let footer = "";
   if (state.status === "loading" && activeAnalysis) {
-    const tokens = state.approxOutputTokens;
-    body = <Spinner analysis={activeAnalysis} tokens={tokens} startedAt={state.startedAt} />;
-    footer = `${activeAnalysis.lens} · Esc cancel · ~${fmtTokens(tokens)} tok…`;
+    const tokens = state.progress.approxOutputTokens;
+    body = (
+      <box flexDirection="column">
+        <Spinner
+          analysis={activeAnalysis}
+          tokens={tokens}
+          progress={state.progress}
+          startedAt={state.startedAt}
+        />
+        <AnalysisMarkdown content={state.progress.markdown} />
+      </box>
+    );
+    footer = `${activeAnalysis.lens} · Esc cancel · ~${fmtTokens(tokens)} out · ~${fmtTokens(state.progress.approxReasoningTokens)} reasoning`;
   } else if (!suspect) {
     body = <text attributes={TextAttributes.DIM}>Select a suspect from the Who pane.</text>;
   } else if (fresh && state.status === "error") {
-    body = <text fg={ERROR}>analysis failed: {state.message}</text>;
+    body = (
+      <box flexDirection="column">
+        <text fg={ERROR}>analysis failed: {state.message}</text>
+        <ActivityLog activities={state.progress.activities} now={Date.now()} />
+        <AnalysisMarkdown content={state.progress.markdown} />
+      </box>
+    );
   } else if (fresh && state.status === "done") {
-    body =
-      perspective.renderer === "metric-bars" ? (
-        <MetricsView result={state.value as MetricsResult} />
-      ) : (
-        <NarrativeView result={state.value as NarrativeResult} />
-      );
-    footer = `${state.usage.output} out · ${fmtTokens(state.usage.total)} tok · session ${fmtTokens(sessionTokens)} · ${fmtTime(state.generatedAt)} · ${fmtElapsed(state.elapsedMs)}`;
+    body = (
+      <box flexDirection="column">
+        <CompletedRun
+          suspect={suspect}
+          lens={perspective.label}
+          model={model}
+          language={language}
+          elapsedMs={state.elapsedMs}
+          progress={state.progress}
+        />
+        <AnalysisMarkdown content={state.markdown} />
+      </box>
+    );
+    const runCost = state.costUsd === undefined ? "" : ` · ${fmtCost(state.costUsd)}`;
+    const sessionCost =
+      sessionCostUsd === null
+        ? `${fmtTokens(sessionTokens)} tok`
+        : `${fmtTokens(sessionTokens)}/${fmtCost(sessionCostUsd)}`;
+    footer = `${fmtTokens(state.usage.total)} tok${runCost} · session ${sessionCost} · ${fmtElapsed(state.elapsedMs)}`;
   } else {
     body = (
       <ReadyView suspect={suspect} lens={perspective.label} model={model} language={language} />

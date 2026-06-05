@@ -141,6 +141,16 @@ export interface AuthorEvidence {
   relativeToFile: RelativeToFile;
 }
 
+/** Compact facts about the pre-TUI git collection pass. */
+export interface EvidenceCollectionSummary {
+  scopedLines: number;
+  historyCommits: number;
+  authorCount: number;
+  sourceCharacters: number;
+  gitCollectionMs: number;
+  evidenceBuildMs: number;
+}
+
 /** Token spend for one analysis call (summed across any retries). */
 export interface TokenUsage {
   input: number;
@@ -148,16 +158,50 @@ export interface TokenUsage {
   total: number;
 }
 
+export type AnalysisActivityStatus = "active" | "done" | "error";
+
+/** One visible lifecycle step for a running analysis. */
+export interface AnalysisActivity {
+  id: string;
+  label: string;
+  status: AnalysisActivityStatus;
+  startedAt: number;
+  endedAt?: number;
+  detail?: string;
+}
+
+/** Live model diagnostics emitted while an analysis is running. */
+export interface AnalysisProgress {
+  approxOutputTokens: number;
+  approxReasoningTokens: number;
+  activities: AnalysisActivity[];
+  markdown: string;
+}
+
 /** Result of analysis — async state machine for the Why pane. */
 export type AnalysisState =
   | { status: "idle" }
-  | { status: "loading"; requestId: number; approxOutputTokens: number; startedAt: number }
+  | {
+      status: "loading";
+      requestId: number;
+      startedAt: number;
+      progress: AnalysisProgress;
+    }
   | {
       status: "done";
       requestId: number;
-      value: unknown;
+      markdown: string;
       usage: TokenUsage;
+      costUsd?: number;
+      progress: AnalysisProgress;
       generatedAt: number;
       elapsedMs: number;
     }
-  | { status: "error"; requestId: number; message: string };
+  | {
+      status: "error";
+      requestId: number;
+      message: string;
+      startedAt: number;
+      elapsedMs: number;
+      progress: AnalysisProgress;
+    };

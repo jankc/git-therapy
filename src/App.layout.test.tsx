@@ -70,8 +70,20 @@ const authors: AuthorEvidence[] = [
   author("Cy", 6),
   author("Dee", 4),
 ];
+const evidenceSummary = {
+  scopedLines: 1,
+  historyCommits: 1,
+  authorCount: authors.length,
+  sourceCharacters: 13,
+  gitCollectionMs: 10,
+  evidenceBuildMs: 2,
+};
 
-async function renderRows(height: number, tabCount = 0): Promise<string[]> {
+async function renderRows(
+  height: number,
+  tabCount = 0,
+  toggleEvidence = false,
+): Promise<string[]> {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const setup = await createTestRenderer({
     width: 120,
@@ -88,6 +100,7 @@ async function renderRows(height: number, tabCount = 0): Promise<string[]> {
           file="src/App.tsx"
           blame={blame}
           authors={authors}
+          evidenceSummary={evidenceSummary}
           initialSelection={{ providerId: "ollama", model: "test-model" }}
           initialLanguage="English"
         />,
@@ -97,6 +110,12 @@ async function renderRows(height: number, tabCount = 0): Promise<string[]> {
     for (let i = 0; i < tabCount; i++) {
       act(() => {
         setup.mockInput.pressTab();
+      });
+      await setup.renderOnce();
+    }
+    if (toggleEvidence) {
+      act(() => {
+        setup.mockInput.pressKey("v");
       });
       await setup.renderOnce();
     }
@@ -168,5 +187,16 @@ describe("App terminal layout", () => {
       expect(left.some((row) => row.includes("Mental & Emotional")), "first lens visible").toBe(true);
       expect(left.some((row) => row.includes("Skill & Experience")), "second lens visible").toBe(true);
     }
+  });
+
+  test("toggles the Symptoms pane to a compact evidence summary", async () => {
+    const compact = leftRows(await renderRows(24, 0, true), 24);
+    const expanded = leftRows(await renderRows(40, 0, true), 40);
+
+    expect(compact.some((row) => row.includes("Code | [Evidence]"))).toBe(true);
+    expect(compact.some((row) => row.includes("10 owned lines"))).toBe(true);
+    expect(compact.some((row) => row.includes("Mental & Emotional"))).toBe(true);
+    expect(expanded.some((row) => row.includes("git blame --line-porcelain"))).toBe(true);
+    expect(expanded.some((row) => row.includes("1 history commits"))).toBe(true);
   });
 });

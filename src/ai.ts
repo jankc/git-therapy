@@ -1,18 +1,26 @@
 // Provider boundary — the ONLY file that imports the AI SDK.
 //
-// Structured output via prompt-for-JSON + JSON.parse + Zod validation (with a
-// bounded retry). This is provider-agnostic: it does not rely on native
-// `json_schema` support, which Kimi and local Ollama models lack.
+// Provider-agnostic Markdown output. Text is exposed while it streams, so this
+// boundary does not depend on native structured-output support.
 
 import { appendFileSync } from "node:fs";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import {
+  createOpenAICompatible,
+  type MetadataExtractor,
+} from "@ai-sdk/openai-compatible";
 import { streamText } from "ai";
 import {
   loadUserConfig,
   resolveSecret,
   type UserProviderConfig,
 } from "./config";
-import type { AuthorEvidence, TokenUsage } from "./types";
+import type {
+  AnalysisActivity,
+  AnalysisActivityStatus,
+  AnalysisProgress,
+  AuthorEvidence,
+  TokenUsage,
+} from "./types";
 import type { Perspective } from "./perspectives";
 
 // Debug flag: when GIT_THERAPY_OUTGOING_LOG is set to a path, dump the exact
@@ -21,8 +29,9 @@ import type { Perspective } from "./perspectives";
 const OUTGOING_LOG = process.env.GIT_THERAPY_OUTGOING_LOG ?? null;
 
 export interface AnalysisResult {
-  value: unknown;
+  markdown: string;
   usage: TokenUsage;
+  costUsd?: number;
 }
 
 // A provider is one endpoint + credential that can serve several models. The
@@ -44,7 +53,7 @@ const BUILTIN_PROVIDERS = {
   ollama: {
     baseURL: "http://localhost:11434/v1",
     envKey: null,
-    // 9B, strong instruction-following + tool use (reliable schema-valid JSON),
+    // 9B, strong instruction-following + tool use,
     // 201 languages (so Czech mode works). qwen3.5:4b is the lighter same-family
     // fallback (reachable with M). Override with OLLAMA_MODEL or the config file.
     models: [process.env.OLLAMA_MODEL ?? "qwen3.5:9b", "qwen3.5:4b"],
@@ -97,8 +106,8 @@ interface ProviderConfig {
   models: string[];
 }
 
-// Output language for the analysis ('l' key). The model writes all human-readable
-// text in this language; the JSON keys stay English so schema validation holds.
+// Output language for the analysis ('l' key). The model writes the full Markdown
+// report in this language while preserving the requested structure.
 export const LANGUAGES = ["English", "Czech"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
@@ -111,9 +120,8 @@ export function parseLanguage(input: string): Language {
 
 function languageInstruction(language: Language): string {
   return (
-    `\nWrite every human-readable text value (metric names, evidence strings, notes, ` +
-    `section headings and bodies) in ${language}. ` +
-    `Do NOT translate the JSON keys themselves — keep them exactly as specified.`
+    `\nWrite the entire report in ${language}, including headings and notes. ` +
+    `Preserve the requested Markdown structure and numeric score syntax.`
   );
 }
 
@@ -252,6 +260,52 @@ function keyPresent(cfg: ProviderConfig): boolean {
   return !cfg.requiresKey || cfg.apiKey !== null;
 }
 
+function extractOpenRouterCost(value: unknown): number | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const usage = (value as { usage?: unknown }).usage;
+  if (typeof usage !== "object" || usage === null) return undefined;
+  const cost = (usage as { cost?: unknown }).cost;
+  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0
+    ? cost
+    : undefined;
+}
+
+/** Preserve OpenRouter's non-standard `usage.cost` field through the AI SDK. */
+export function createOpenRouterCostMetadataExtractor(): MetadataExtractor {
+  return {
+    async extractMetadata({ parsedBody }) {
+      const costUsd = extractOpenRouterCost(parsedBody);
+      return costUsd === undefined ? undefined : { openrouter: { costUsd } };
+    },
+    createStreamExtractor() {
+      let costUsd: number | undefined;
+      return {
+        processChunk(parsedChunk) {
+          costUsd = extractOpenRouterCost(parsedChunk) ?? costUsd;
+        },
+        buildMetadata() {
+          return costUsd === undefined ? undefined : { openrouter: { costUsd } };
+        },
+      };
+    },
+  };
+}
+
+const MAX_ACTIVITY_EVENTS = 24;
+
+export function upsertAnalysisActivity(
+  activities: AnalysisActivity[],
+  next: AnalysisActivity,
+  limit: number = MAX_ACTIVITY_EVENTS,
+): AnalysisActivity[] {
+  const existing = activities.findIndex((activity) => activity.id === next.id);
+  const updated =
+    existing === -1
+      ? [...activities, next]
+      : activities.map((activity, index) => (index === existing ? next : activity));
+  return updated.slice(-limit);
+}
+
 /** The provider cycle order (built-ins plus any config providers). */
 export function providerOrder(): ProviderId[] {
   return registry().order;
@@ -334,13 +388,82 @@ export function modelLabel(selection: ModelSelection): string {
 }
 
 /** Construct the OpenAI-compatible AI SDK model for the given selection. */
-function buildModel(selection: ModelSelection, cfg: ProviderConfig) {
+export interface HttpAttemptEvent {
+  id: string;
+  status: AnalysisActivityStatus;
+  startedAt: number;
+  endedAt?: number;
+  detail: string;
+}
+
+export function createInstrumentedFetch(
+  baseFetch: typeof fetch,
+  getGenerationAttempt: () => number,
+  onHttpAttempt?: (event: HttpAttemptEvent) => void,
+): typeof fetch {
+  let httpAttempt = 0;
+  const instrumentedFetch = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
+    const attempt = ++httpAttempt;
+    const generationAttempt = getGenerationAttempt();
+    const id = `generation-${generationAttempt}-http-${attempt}`;
+    const startedAt = Date.now();
+    onHttpAttempt?.({
+      id,
+      status: "active",
+      startedAt,
+      detail: `generation ${generationAttempt}, transport attempt ${attempt}`,
+    });
+    try {
+      const response = await baseFetch(input, init);
+      const endedAt = Date.now();
+      onHttpAttempt?.({
+        id,
+        status: response.ok ? "done" : "error",
+        startedAt,
+        endedAt,
+        detail: `HTTP ${response.status} in ${formatDuration(endedAt - startedAt)}`,
+      });
+      return response;
+    } catch (error) {
+      const endedAt = Date.now();
+      onHttpAttempt?.({
+        id,
+        status: "error",
+        startedAt,
+        endedAt,
+        detail: `${describeError(error)} after ${formatDuration(endedAt - startedAt)}`,
+      });
+      throw error;
+    }
+  };
+  instrumentedFetch.preconnect = baseFetch.preconnect;
+  return instrumentedFetch;
+}
+
+function buildModel(
+  selection: ModelSelection,
+  cfg: ProviderConfig,
+  getGenerationAttempt: () => number,
+  onHttpAttempt?: (event: HttpAttemptEvent) => void,
+) {
   const openai = createOpenAICompatible({
     name: selection.providerId,
     baseURL: cfg.baseURL,
     // A keyless endpoint still wants *some* bearer; send a harmless placeholder.
     apiKey: cfg.apiKey ?? "no-key",
     includeUsage: true, // request token usage in streaming responses
+    metadataExtractor:
+      selection.providerId === "openrouter"
+        ? createOpenRouterCostMetadataExtractor()
+        : undefined,
+    fetch: createInstrumentedFetch(
+      globalThis.fetch,
+      getGenerationAttempt,
+      onHttpAttempt,
+    ),
   });
   return openai(selection.model);
 }
@@ -348,6 +471,16 @@ function buildModel(selection: ModelSelection, cfg: ProviderConfig) {
 /** Rough token estimate when a provider omits usage from the stream (~4 chars/token). */
 function estimateTokens(chars: number): number {
   return Math.ceil(chars / 4);
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
+}
+
+function shortError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.length > 100 ? `${message.slice(0, 97)}...` : message;
 }
 
 /** Extract the most useful message from an AI SDK / API error (incl. retry wrappers). */
@@ -366,32 +499,10 @@ function describeError(err: unknown): string {
   return status ? `${status}: ${message}` : message;
 }
 
-/** Pull a JSON object out of model text, tolerating fences / stray prose. */
-function extractJson(text: string): unknown {
-  const trimmed = text.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    // Strip a leading ```json fence or grab the first {...} block.
-    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced?.[1]) {
-      try {
-        return JSON.parse(fenced[1].trim());
-      } catch {
-        /* fall through */
-      }
-    }
-    const brace = trimmed.match(/\{[\s\S]*\}/);
-    if (brace) return JSON.parse(brace[0]);
-    throw new Error("model did not return a JSON object");
-  }
-}
-
 /**
  * Run one analysis. Streams the response so callers can show live progress via
- * `onProgress` (approximate output-token count). Returns the schema-validated
- * object plus exact token usage summed across any retries. Throws on persistent
- * parse/validation failure or abort.
+ * `onProgress`. Returns the final Markdown plus exact token usage and reported
+ * provider cost. Throws on provider failure or abort.
  */
 export async function generateAnalysis(
   evidence: AuthorEvidence,
@@ -399,7 +510,7 @@ export async function generateAnalysis(
   selection: ModelSelection,
   language: Language,
   signal?: AbortSignal,
-  onProgress?: (approxOutputTokens: number) => void,
+  onProgress?: (progress: AnalysisProgress) => void,
 ): Promise<AnalysisResult> {
   const cfg = configFor(selection.providerId);
   if (cfg.requiresKey && cfg.apiKey === null) {
@@ -408,85 +519,260 @@ export async function generateAnalysis(
       `missing key for "${selection.providerId}" — ${what}, or press 'm' for a local model (ollama)`,
     );
   }
-  const model = buildModel(selection, cfg);
+  const generationAttempt = 1;
+  let activities: AnalysisActivity[] = [];
+  let markdown = "";
+  let textChars = 0;
+  let reasoningChars = 0;
+  let lastProgressFlush = 0;
 
-  // Qwen3-family models reason by default; for strict JSON-only output that
-  // preamble just wastes tokens and risks polluting the parse. `/no_think` is
-  // Qwen's soft switch to turn it off — scoped to qwen3* so it never confuses a
-  // model that doesn't understand the directive.
+  const publishProgress = (force: boolean = true) => {
+    const now = performance.now();
+    if (!force && now - lastProgressFlush < 100) return;
+    lastProgressFlush = now;
+    onProgress?.({
+      approxOutputTokens: estimateTokens(textChars),
+      approxReasoningTokens: estimateTokens(reasoningChars),
+      activities: [...activities],
+      markdown,
+    });
+  };
+
+  const setActivity = (
+    id: string,
+    label: string,
+    status: AnalysisActivityStatus,
+    startedAt: number,
+    detail?: string,
+    endedAt?: number,
+    force: boolean = true,
+  ) => {
+    const existing = activities.find((activity) => activity.id === id);
+    activities = upsertAnalysisActivity(activities, {
+      id,
+      label,
+      status,
+      startedAt: existing?.startedAt ?? startedAt,
+      endedAt,
+      detail,
+    });
+    publishProgress(force);
+  };
+
+  const model = buildModel(
+    selection,
+    cfg,
+    () => generationAttempt,
+    (event) => {
+      setActivity(
+        event.id,
+        "Provider request",
+        event.status,
+        event.startedAt,
+        event.detail,
+        event.endedAt,
+      );
+    },
+  );
+
+  // Qwen3-family models reason by default. `/no_think` keeps the visible report
+  // responsive and is scoped to qwen3* so it never confuses other models.
   const noThink = /qwen3/i.test(selection.model) ? " /no_think" : "";
   const system =
     perspective.system +
     languageInstruction(language) +
-    "\nReturn ONLY the JSON object. No markdown, no code fences, no prose." +
+    "\nReturn ONLY the Markdown report. Do not wrap it in a code fence." +
     noThink;
 
   const prompt = perspective.buildPrompt(evidence);
-  let lastErr: unknown;
+  const preparedAt = Date.now();
+  setActivity(
+    "evidence",
+    "Evidence prepared",
+    "done",
+    preparedAt,
+    `${evidence.blamedLines.length} lines · ${evidence.blamedCommits.length} blamed commits · ${evidence.authorBaseline.totalFileCommits} baseline commits`,
+    preparedAt,
+  );
+  setActivity(
+    "prompt",
+    "Prompt assembled",
+    "done",
+    preparedAt,
+    `${prompt.length.toLocaleString()} chars · ~${estimateTokens(prompt.length).toLocaleString()} tok`,
+    preparedAt,
+  );
   const usage: TokenUsage = { input: 0, output: 0, total: 0 };
+  const attemptStartedAt = Date.now();
+  let streamError: unknown;
+  if (OUTGOING_LOG) {
+    appendFileSync(
+      OUTGOING_LOG,
+      `\n=== → model (${selection.providerId}/${selection.model}, lens=${perspective.id}) ===\n` +
+        `--- system ---\n${system}\n` +
+        `--- prompt ---\n${prompt}\n=== end ===\n`,
+    );
+  }
+  const result = streamText({
+    model,
+    system,
+    prompt,
+    abortSignal: signal,
+    onChunk: ({ chunk }) => {
+      const now = Date.now();
+      const waitingId = `generation-${generationAttempt}-waiting`;
+      if (chunk.type === "reasoning-delta") {
+        reasoningChars += chunk.text.length;
+        const waiting = activities.find((activity) => activity.id === waitingId);
+        if (!waiting || waiting.status === "active") {
+          setActivity(
+            waitingId,
+            "First model event",
+            "done",
+            attemptStartedAt,
+            `reasoning began after ${formatDuration(now - attemptStartedAt)}`,
+            now,
+            false,
+          );
+        }
+        setActivity(
+          `generation-${generationAttempt}-reasoning`,
+          "Model reasoning",
+          "active",
+          now,
+          `~${estimateTokens(reasoningChars).toLocaleString()} tok`,
+          undefined,
+          false,
+        );
+      } else if (chunk.type === "text-delta") {
+        markdown += chunk.text;
+        textChars = markdown.length;
+        const waiting = activities.find((activity) => activity.id === waitingId);
+        if (!waiting || waiting.status === "active") {
+          setActivity(
+            waitingId,
+            "First model event",
+            "done",
+            attemptStartedAt,
+            `answer began after ${formatDuration(now - attemptStartedAt)}`,
+            now,
+            false,
+          );
+        }
+        const reasoning = activities.find(
+          (activity) => activity.id === `generation-${generationAttempt}-reasoning`,
+        );
+        if (reasoning?.status === "active") {
+          setActivity(
+            reasoning.id,
+            reasoning.label,
+            "done",
+            reasoning.startedAt,
+            reasoning.detail,
+            now,
+            false,
+          );
+        }
+        const stream = activities.find(
+          (activity) => activity.id === `generation-${generationAttempt}-stream`,
+        );
+        const streamStartedAt = stream?.startedAt ?? now;
+        const elapsedSeconds = Math.max(0.001, (now - streamStartedAt) / 1000);
+        setActivity(
+          `generation-${generationAttempt}-stream`,
+          "Answer streaming",
+          "active",
+          streamStartedAt,
+          `~${estimateTokens(textChars).toLocaleString()} tok · ${(estimateTokens(textChars) / elapsedSeconds).toFixed(1)} tok/s`,
+          undefined,
+          false,
+        );
+      }
+    },
+    onError: ({ error }) => {
+      streamError = error;
+    },
+  });
+  setActivity(
+    `generation-${generationAttempt}-waiting`,
+    "First model event",
+    "active",
+    attemptStartedAt,
+    "waiting for provider/model",
+  );
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const attemptSystem =
-      attempt === 0
-        ? system
-        : system +
-          "\nYour previous reply was not valid JSON. Output ONLY the JSON object now.";
-    // streamText routes API/network errors to onError and ends the text stream
-    // empty (surfacing only a useless "No output generated" later). Capture the
-    // real error here so it can be reported instead.
-    let streamError: unknown;
-    // Dump the exact outgoing payload when the debug flag is set. Tail it with
-    // `tail -f <path>`.
-    if (OUTGOING_LOG) {
-      appendFileSync(
-        OUTGOING_LOG,
-        `\n=== → model (${selection.providerId}/${selection.model}, lens=${perspective.id}, attempt ${attempt + 1}) ===\n` +
-          `--- system ---\n${attemptSystem}\n` +
-          `--- prompt ---\n${prompt}\n=== end ===\n`,
+  let finalText = "";
+  for await (const delta of result.textStream) {
+    finalText += delta;
+  }
+  markdown = finalText || markdown;
+  textChars = markdown.length;
+  publishProgress();
+
+  const streamEndedAt = Date.now();
+  const waiting = activities.find(
+    (activity) => activity.id === `generation-${generationAttempt}-waiting`,
+  );
+  if (waiting?.status === "active") {
+    setActivity(
+      waiting.id,
+      waiting.label,
+      streamError ? "error" : "done",
+      waiting.startedAt,
+      streamError ? shortError(streamError) : "stream ended without reasoning or answer text",
+      streamEndedAt,
+    );
+  }
+  for (const id of [
+    `generation-${generationAttempt}-reasoning`,
+    `generation-${generationAttempt}-stream`,
+  ]) {
+    const activity = activities.find((candidate) => candidate.id === id);
+    if (activity?.status === "active") {
+      setActivity(
+        id,
+        activity.label,
+        "done",
+        activity.startedAt,
+        activity.detail,
+        streamEndedAt,
       );
     }
-    const result = streamText({
-      model,
-      system: attemptSystem,
-      prompt,
-      abortSignal: signal,
-      onError: ({ error }) => {
-        streamError = error;
-      },
-    });
-
-    let text = "";
-    for await (const delta of result.textStream) {
-      text += delta;
-      onProgress?.(estimateTokens(text.length)); // live estimate
-    }
-
-    // An API/network failure (e.g. 429 insufficient balance) is not a parse
-    // problem — surface it immediately rather than retrying.
-    if (streamError) throw new Error(describeError(streamError));
-
-    // Exact usage resolves once the stream finishes; fall back to a char-based
-    // estimate when the provider omits usage (e.g. some local Ollama builds).
-    const u = await result.usage;
-    const inTok = u.inputTokens ?? 0;
-    const outTok = u.outputTokens ?? 0;
-    if (inTok === 0 && outTok === 0) {
-      usage.input += estimateTokens(attemptSystem.length + prompt.length);
-      usage.output += estimateTokens(text.length);
-    } else {
-      usage.input += inTok;
-      usage.output += outTok;
-    }
-    usage.total = usage.input + usage.output;
-
-    try {
-      const value = perspective.schema.parse(extractJson(text));
-      return { value, usage };
-    } catch (err) {
-      lastErr = err;
-    }
   }
-  throw new Error(
-    `analysis did not produce valid output: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
+
+  if (streamError) throw new Error(describeError(streamError));
+
+  const finalizingStartedAt = Date.now();
+  setActivity(
+    `generation-${generationAttempt}-finalize`,
+    "Usage and cost",
+    "active",
+    finalizingStartedAt,
+    "waiting for final usage metadata",
   );
+  const u = await result.usage;
+  const inTok = u.inputTokens ?? 0;
+  const outTok = u.outputTokens ?? 0;
+  if (inTok === 0 && outTok === 0) {
+    usage.input = estimateTokens(system.length + prompt.length);
+    usage.output = estimateTokens(markdown.length);
+  } else {
+    usage.input = inTok;
+    usage.output = outTok;
+  }
+  usage.total = usage.input + usage.output;
+  const providerMetadata = await result.providerMetadata;
+  const reportedCost = providerMetadata?.openrouter?.costUsd;
+  const costUsd = typeof reportedCost === "number" ? reportedCost : undefined;
+  const finalizingEndedAt = Date.now();
+  setActivity(
+    `generation-${generationAttempt}-finalize`,
+    "Usage and cost",
+    "done",
+    finalizingStartedAt,
+    `${usage.total.toLocaleString()} tok${costUsd === undefined ? "" : ` · $${costUsd.toFixed(6)}`}`,
+    finalizingEndedAt,
+  );
+
+  return { markdown, usage, costUsd };
 }

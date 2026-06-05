@@ -28,12 +28,18 @@ import { PerspectivePane } from "./panes/PerspectivePane";
 import { WhyPane } from "./panes/WhyPane";
 import { ModelPane } from "./panes/ModelPane";
 import { LanguagePane } from "./panes/LanguagePane";
-import type { AnalysisState, AuthorEvidence, BlameLine } from "./types";
+import type {
+  AnalysisState,
+  AuthorEvidence,
+  BlameLine,
+  EvidenceCollectionSummary,
+} from "./types";
 
 export interface AppProps {
   file: string;
   blame: BlameLine[];
   authors: AuthorEvidence[];
+  evidenceSummary: EvidenceCollectionSummary;
   /** Starting (provider, model) — from config/env/flags, resolved in index.tsx. */
   initialSelection: ModelSelection;
   /** Starting output language — from config/flags. */
@@ -47,8 +53,16 @@ const LOWER_CONTROLS_GAP = 1;
 const LEFT_STACK_GAP = 1;
 const MIN_SYMPTOMS_HEIGHT = 5;
 
-export function App({ file, blame, authors, initialSelection, initialLanguage }: AppProps) {
+export function App({
+  file,
+  blame,
+  authors,
+  evidenceSummary,
+  initialSelection,
+  initialLanguage,
+}: AppProps) {
   const [focusedPane, setFocusedPane] = useState<PaneId>(INITIAL_FOCUSED_PANE_ID);
+  const [whatView, setWhatView] = useState<"code" | "evidence">("code");
   const [perspectiveIndex, setPerspectiveIndex] = useState(0);
   // The current suspect tracks the Who list cursor; default to the top contributor.
   const [selectedAuthor, setSelectedAuthor] = useState<AuthorEvidence | null>(authors[0] ?? null);
@@ -152,13 +166,18 @@ export function App({ file, blame, authors, initialSelection, initialLanguage }:
     setRunRequest(null);
   }
 
-  // Accumulate token spend across analyses (count each completed run once).
+  // Accumulate token and reported OpenRouter spend across completed analyses.
   const [sessionTokens, setSessionTokens] = useState(0);
+  const [sessionCostUsd, setSessionCostUsd] = useState<number | null>(null);
   const countedRef = useRef<AnalysisState | null>(null);
   useEffect(() => {
     if (analysis.status === "done" && countedRef.current !== analysis) {
       countedRef.current = analysis;
       setSessionTokens((t) => t + analysis.usage.total);
+      if (analysis.costUsd !== undefined) {
+        const runCostUsd = analysis.costUsd;
+        setSessionCostUsd((cost) => (cost ?? 0) + runCostUsd);
+      }
       // Cache the finished result under the request that produced it.
       if (runRequest && analysisMatchesRun) {
         cacheRef.current.set(
@@ -185,6 +204,8 @@ export function App({ file, blame, authors, initialSelection, initialLanguage }:
       setFocusedPane((current) => getNextPaneId(current));
     } else if (key.name === "q") {
       quit();
+    } else if (key.name === "v") {
+      setWhatView((current) => (current === "code" ? "evidence" : "code"));
     } else if (key.name === "m" || key.name === "M") {
       // 'm' cycles the provider (landing on its default model); 'M' (shift)
       // cycles the model within the current provider. Node-style key parsing
@@ -212,7 +233,11 @@ export function App({ file, blame, authors, initialSelection, initialLanguage }:
           focused={focusedPane === "what"}
           file={file}
           blame={blame}
+          authors={authors}
+          evidenceSummary={evidenceSummary}
           selectedAuthor={selectedAuthor}
+          perspective={perspective}
+          view={whatView}
         />
         <box
           flexDirection="column"
@@ -244,6 +269,7 @@ export function App({ file, blame, authors, initialSelection, initialLanguage }:
         activeAnalysis={activeAnalysis}
         fresh={displayFresh}
         sessionTokens={sessionTokens}
+        sessionCostUsd={sessionCostUsd}
       />
     </box>
   );

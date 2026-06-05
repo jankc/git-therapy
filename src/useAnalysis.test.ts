@@ -49,6 +49,12 @@ const evidence: AuthorEvidence = {
   derived: ZERO_DERIVED,
   relativeToFile: ZERO_RELATIVE,
 };
+const EMPTY_PROGRESS = {
+  approxOutputTokens: 0,
+  approxReasoningTokens: 0,
+  activities: [],
+  markdown: "",
+};
 
 function request(id: number): AnalysisRequest {
   return {
@@ -64,7 +70,7 @@ describe("analysisStateMatchesRequest", () => {
   test("matches loading, done, and error states by request id", () => {
     expect(
       analysisStateMatchesRequest(
-        { status: "loading", requestId: 1, approxOutputTokens: 0, startedAt: 0 },
+        { status: "loading", requestId: 1, startedAt: 0, progress: EMPTY_PROGRESS },
         request(1),
       ),
     ).toBe(true);
@@ -73,8 +79,9 @@ describe("analysisStateMatchesRequest", () => {
         {
           status: "done",
           requestId: 1,
-          value: {},
+          markdown: "# Current",
           usage: { input: 1, output: 1, total: 2 },
+          progress: EMPTY_PROGRESS,
           generatedAt: 0,
           elapsedMs: 0,
         },
@@ -83,7 +90,14 @@ describe("analysisStateMatchesRequest", () => {
     ).toBe(true);
     expect(
       analysisStateMatchesRequest(
-        { status: "error", requestId: 1, message: "failed" },
+        {
+          status: "error",
+          requestId: 1,
+          message: "failed",
+          startedAt: 0,
+          elapsedMs: 1,
+          progress: EMPTY_PROGRESS,
+        },
         request(1),
       ),
     ).toBe(true);
@@ -95,8 +109,9 @@ describe("analysisStateMatchesRequest", () => {
         {
           status: "done",
           requestId: 1,
-          value: { sections: [{ heading: "old", body: "old" }] },
+          markdown: "# Old",
           usage: { input: 1, output: 1, total: 2 },
+          progress: EMPTY_PROGRESS,
           generatedAt: 0,
           elapsedMs: 0,
         },
@@ -109,7 +124,7 @@ describe("analysisStateMatchesRequest", () => {
     expect(analysisStateMatchesRequest({ status: "idle" }, request(1))).toBe(false);
     expect(
       analysisStateMatchesRequest(
-        { status: "loading", requestId: 1, approxOutputTokens: 0, startedAt: 0 },
+        { status: "loading", requestId: 1, startedAt: 0, progress: EMPTY_PROGRESS },
         null,
       ),
     ).toBe(false);

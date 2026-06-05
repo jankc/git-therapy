@@ -21,6 +21,7 @@ import { configExists, configPath, initConfig } from "./config";
 import { collect } from "./git";
 import { buildAuthorEvidence } from "./evidence";
 import { App } from "./App";
+import type { EvidenceCollectionSummary } from "./types";
 import pkg from "../package.json";
 
 function fail(message: string): never {
@@ -68,6 +69,7 @@ Config:
 Keys (inside the TUI):
   Tab    move between panes        m / M  cycle provider / model
   ↑ / ↓  move the selection        l      toggle language (English / Czech)
+  v      toggle code / evidence
   Enter  run the examination       Esc    cancel a running analysis
   q      quit
 
@@ -149,18 +151,30 @@ try {
 }
 
 let blame, commits, scopeCode;
+const gitCollectionStartedAt = performance.now();
 try {
   ({ blame, commits, scopeCode } = await collect(target));
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err));
 }
+const gitCollectionMs = performance.now() - gitCollectionStartedAt;
 
 if (blame.length === 0) {
   fail(`no blame data for ${target.file} — is it a tracked file in this repo?`);
 }
 
 const now = Date.now();
+const evidenceBuildStartedAt = performance.now();
 const authors = buildAuthorEvidence(blame, commits, scopeCode, now);
+const evidenceBuildMs = performance.now() - evidenceBuildStartedAt;
+const evidenceSummary: EvidenceCollectionSummary = {
+  scopedLines: blame.length,
+  historyCommits: commits.length,
+  authorCount: authors.length,
+  sourceCharacters: scopeCode.length,
+  gitCollectionMs,
+  evidenceBuildMs,
+};
 
 console.error(`git-therapy: ${authors.length} author(s), model ${modelLabel(selection)}`);
 
@@ -178,6 +192,7 @@ createRoot(renderer).render(
     file={target.file}
     blame={blame}
     authors={authors}
+    evidenceSummary={evidenceSummary}
     initialSelection={selection}
     initialLanguage={language}
   />,

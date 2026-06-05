@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getPerspective, MetricsSchema, NarrativeSchema, PERSPECTIVES } from "./perspectives";
+import { getPerspective, PERSPECTIVES } from "./perspectives";
 import type { AuthorEvidence } from "./types";
 
 const ZERO_CODE_SCAN = { todos: 0, fixmes: 0, hacks: 0, exclamations: 0, allCapsTokens: 0, magicNumbers: 0, maxNestingDepth: 0, maxLineLength: 0, profanity: 0 };
@@ -144,21 +144,11 @@ describe("perspective registry", () => {
     expect(new Set(PERSPECTIVES.map((p) => p.id)).size).toBe(5);
   });
 
-  test("only Hidden Narratives uses the narrative renderer", () => {
+  test("every system prompt forbids jokes and requires Markdown-only", () => {
     for (const p of PERSPECTIVES) {
-      expect(p.renderer).toBe(p.id === "hidden" ? "narrative" : "metric-bars");
-    }
-  });
-
-  test("metric perspectives use MetricsSchema, hidden uses NarrativeSchema", () => {
-    for (const p of PERSPECTIVES) {
-      expect(p.schema).toBe(p.id === "hidden" ? NarrativeSchema : MetricsSchema);
-    }
-  });
-
-  test("every system prompt forbids jokes and requires JSON-only", () => {
-    for (const p of PERSPECTIVES) {
-      expect(p.system).toContain("Return ONLY a JSON object");
+      expect(p.system).toContain("Return ONLY the requested Markdown report");
+      expect(p.system).toContain("no JSON");
+      expect(p.system).toContain("no code fences");
       expect(p.system.toLowerCase()).toContain("evidence");
       expect(p.system).toContain("BLAMED LINES");
       expect(p.system).toContain("AUTHOR BASELINE");
@@ -175,8 +165,11 @@ describe("perspective registry", () => {
     expect(prompt).toContain("SCOPE CODE");
   });
 
-  test("every metric-bars system prompt carries calibrated scale rules", () => {
-    for (const p of PERSPECTIVES.filter((perspective) => perspective.renderer === "metric-bars")) {
+  test("every scored system prompt carries the score template and calibrated scale rules", () => {
+    for (const p of PERSPECTIVES.filter((perspective) => perspective.id !== "hidden")) {
+      expect(p.system).toContain(`# ${p.label}`);
+      expect(p.system).toContain("**<integer from 0 to 100>/100**");
+      expect(p.system).toContain("## Notes");
       expect(p.system).toContain("Scale anchors");
       expect(p.system).toContain("0 means no supporting evidence");
       expect(p.system).toContain("~50 means weak or ambiguous evidence");
@@ -184,8 +177,6 @@ describe("perspective registry", () => {
       expect(p.system).toContain("above 75 requires at least two distinct cited data points");
       expect(p.system).toContain("Sparse evidence (few owned lines or few blamed commits)");
       expect(p.system).toContain("contradicts a metric's premise");
-      expect(p.system).toContain("Illustrative example only, not data about the analyzed author");
-      expect(p.system).toContain("line 12 sha abc1234");
     }
   });
 
@@ -195,7 +186,9 @@ describe("perspective registry", () => {
     expect(hidden.system).not.toContain("Scale anchors");
     expect(hidden.system).not.toContain("0 means no supporting evidence");
     expect(hidden.system).not.toContain("above 75");
-    expect(hidden.system).toContain("Each body MUST quote a concrete datum");
+    expect(hidden.system).toContain("# Hidden Narratives");
+    expect(hidden.system).toContain("## The bug being secretly worked around");
+    expect(hidden.system).toContain("Each paragraph MUST cite a concrete datum");
   });
 
   test("lens prompts include targeted derived signals plus shared core evidence", () => {
@@ -265,36 +258,5 @@ describe("getPerspective", () => {
   test("index resolves, out-of-range falls back to first", () => {
     expect(getPerspective(1).id).toBe("skill");
     expect(getPerspective(99).id).toBe("mental");
-  });
-});
-
-describe("schemas validate", () => {
-  test("MetricsSchema accepts a well-formed object", () => {
-    const r = MetricsSchema.safeParse({
-      author: "Jane",
-      metrics: [
-        { name: "Mood", value: 30, evidence: "ugh" },
-        { name: "Stress", value: 75, evidence: "2am" },
-        { name: "Sleep debt", value: 88, evidence: "3am" },
-      ],
-      notes: [],
-    });
-    expect(r.success).toBe(true);
-  });
-
-  test("MetricsSchema rejects out-of-range value", () => {
-    const r = MetricsSchema.safeParse({
-      author: "Jane",
-      metrics: [{ name: "Mood", value: 200, evidence: "x" }],
-      notes: [],
-    });
-    expect(r.success).toBe(false);
-  });
-
-  test("NarrativeSchema accepts sections", () => {
-    const r = NarrativeSchema.safeParse({
-      sections: [{ heading: "The bug", body: "..." }],
-    });
-    expect(r.success).toBe(true);
   });
 });

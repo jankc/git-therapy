@@ -8,7 +8,11 @@
 import { useEffect, useState } from "react";
 import { generateAnalysis, type Language, type ModelSelection } from "./ai";
 import type { Perspective } from "./perspectives";
-import type { AnalysisState, AuthorEvidence } from "./types";
+import type {
+  AnalysisProgress,
+  AnalysisState,
+  AuthorEvidence,
+} from "./types";
 
 export interface AnalysisRequest {
   /** Bumped on every start so re-running the same config still fires. */
@@ -31,19 +35,21 @@ export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
 
     const controller = new AbortController();
     let cancelled = false;
-    let lastFlush = 0;
     // Absolute start time so the spinner's elapsed clock survives remounts (e.g.
     // navigating away from the running lens and back) instead of restarting at 0.
     const startedAt = Date.now();
-    setState({ status: "loading", requestId: request.id, approxOutputTokens: 0, startedAt });
+    let progress: AnalysisProgress = {
+      approxOutputTokens: 0,
+      approxReasoningTokens: 0,
+      activities: [],
+      markdown: "",
+    };
+    setState({ status: "loading", requestId: request.id, startedAt, progress });
 
-    // Throttle live token updates to ~10 Hz so streaming doesn't thrash renders.
-    const onProgress = (approx: number) => {
+    const onProgress = (next: AnalysisProgress) => {
       if (cancelled) return;
-      const now = performance.now();
-      if (now - lastFlush < 100) return;
-      lastFlush = now;
-      setState({ status: "loading", requestId: request.id, approxOutputTokens: approx, startedAt });
+      progress = next;
+      setState({ status: "loading", requestId: request.id, startedAt, progress });
     };
 
     generateAnalysis(
@@ -54,14 +60,16 @@ export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
       controller.signal,
       onProgress,
     )
-      .then(({ value, usage }) => {
+      .then(({ markdown, usage, costUsd }) => {
         if (!cancelled) {
           const finishedAt = Date.now();
           setState({
             status: "done",
             requestId: request.id,
-            value,
+            markdown,
             usage,
+            costUsd,
+            progress,
             generatedAt: finishedAt,
             elapsedMs: finishedAt - startedAt,
           });
@@ -69,10 +77,14 @@ export function useAnalysis(request: AnalysisRequest | null): AnalysisState {
       })
       .catch((err) => {
         if (cancelled || controller.signal.aborted) return;
+        const failedAt = Date.now();
         setState({
           status: "error",
           requestId: request.id,
           message: err instanceof Error ? err.message : String(err),
+          startedAt,
+          elapsedMs: failedAt - startedAt,
+          progress,
         });
       });
 

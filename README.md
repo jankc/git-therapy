@@ -18,7 +18,7 @@ blamed commits, commit hours, weekday distribution, line ranges, surrounding sou
 context — and presents that evidence to a model under a strict instruction to behave
 like a calm, slightly pretentious lab report and to **cite its sources**.
 
-The verdict is rendered as labeled metric bars and short narrative findings. Every
+The verdict streams in as Markdown with highlighted scores and short narrative findings. Every
 claim is, in principle, evidence-based. Whether "Sleep debt: 78 / 100 — three commits
 landed between 02:14 and 03:51, additions outpacing deletions 4:1, consistent with
 caffeinated despair" constitutes *science* is left as an exercise for the user.
@@ -78,8 +78,9 @@ and therefore no diagnosis, for code that was never committed. (Make of that wha
 | `Tab`   | move between panes              |
 | `↑ / ↓` | move the selection              |
 | `Enter` | run the examination             |
-| `m`     | cycle model / provider          |
+| `m / M` | cycle provider / model          |
 | `l`     | toggle language (English / Czech) |
+| `v`     | toggle code / evidence summary  |
 | `Esc`   | cancel a running analysis       |
 | `q`     | quit                            |
 
