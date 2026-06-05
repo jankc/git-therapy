@@ -2,7 +2,7 @@
 // hotkey. Mirrors ModelPane's styling so the two sit side by side.
 
 import { TextAttributes } from "@opentui/core";
-import type { Language } from "../ai";
+import type { Language } from "../../ai/llm";
 import { ACCENT, DIM, NEUTRAL } from "./theme";
 
 interface LanguagePaneProps {

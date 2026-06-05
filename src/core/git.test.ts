@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseGitLog, parseTrailers } from "./git";
-import type { RawCommit } from "./types";
+import type { RawCommit } from "../types";
 
 // RS/US-delimited `git log --no-merges --follow --numstat` stdout, captured into
 // a fixture so the parser is exercised without shelling out to git.

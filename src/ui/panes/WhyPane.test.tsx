@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { act } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, type Root } from "@opentui/react";
-import { PERSPECTIVES } from "../perspectives";
-import type { AnalysisState } from "../types";
+import { PERSPECTIVES } from "../../ai/perspectives";
+import type { AnalysisState } from "../../types";
 import { WhyPane } from "./WhyPane";
 
 const EMPTY_PROGRESS = {

@@ -1,11 +1,11 @@
 // User configuration file — the layer that lets a globally-installed
 // `git-therapy` binary add providers, models, keys, and a default without
-// editing source. Precedence (lowest→highest) is applied in `ai.ts`:
+// editing source. Precedence (lowest→highest) is applied in `llm.ts`:
 //   built-in defaults  <  this file  <  env vars  <  CLI flags
 //
 // This module is deliberately AI-agnostic: it only finds, reads, validates and
 // (for secrets) env-expands the file. The merge onto the built-in providers
-// lives in `ai.ts`, which owns the provider domain.
+// lives in `llm.ts`, which owns the provider domain.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";

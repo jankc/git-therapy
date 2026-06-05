@@ -1,7 +1,7 @@
 // The perspective registry: one git evidence input, several prompts, several readings.
 // Every lens emits Markdown so the analysis can render while it is still streaming.
 
-import type { AuthorEvidence } from "./types";
+import type { AuthorEvidence } from "../types";
 
 export interface Perspective {
   id: string;

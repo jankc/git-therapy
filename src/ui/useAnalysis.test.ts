@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { PERSPECTIVES } from "./perspectives";
-import type { AuthorEvidence } from "./types";
+import { PERSPECTIVES } from "../ai/perspectives";
+import type { AuthorEvidence } from "../types";
 import {
   analysisStateMatchesRequest,
   type AnalysisRequest,

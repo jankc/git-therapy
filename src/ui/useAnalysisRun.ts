@@ -4,15 +4,15 @@
 // pane falls back to a cached diagnosis or returns to Ready.
 
 import { useEffect, useRef, useState } from "react";
-import { modelLabel, type Language, type ModelSelection } from "./ai";
-import type { Perspective } from "./perspectives";
+import { modelLabel, type Language, type ModelSelection } from "../ai/llm";
+import type { Perspective } from "../ai/perspectives";
 import {
   analysisStateMatchesRequest,
   diagnosisKey,
   useAnalysis,
   type AnalysisRequest,
 } from "./useAnalysis";
-import type { AnalysisState, AuthorEvidence } from "./types";
+import type { AnalysisState, AuthorEvidence } from "../types";
 
 export interface ActiveAnalysis {
   suspect: string;

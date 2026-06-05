@@ -11,7 +11,7 @@ import type {
   RawCommit,
   RelativeStat,
   RelativeToFile,
-} from "./types";
+} from "../types";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 

@@ -14,24 +14,35 @@ the authors. See `README.md` for the user-facing pitch and the five lenses.
 
 - Run: `bun run src/index.tsx <path>[:<start>-<end>]` (file must be git-tracked).
 - Dev watch: `bun run dev`.
-- Test: `bun test` (Bun's runner), or a single file: `bun test src/blame.test.ts`.
+- Test: `bun test` (Bun's runner), or a single file: `bun test src/core/blame.test.ts`.
 - Typecheck: `bunx tsc --noEmit` — there is **no** typecheck script; run it directly.
 
 ## Module map (`src/`)
 
+Grouped by layer: `core/` (pure, React-free logic), `ai/` (the LLM side), `ui/`
+(terminal UI). The entry point and shared types stay at the root. Tests are colocated
+next to their source; `core/__fixtures__/` holds the git output samples.
+
 - `index.tsx` — entry: parse args, collect git evidence, mount the TUI.
 - `App.tsx` — root: pane layout, focus cycling (Tab), selection state, the run flow.
-- `git.ts` / `blame.ts` — shell to git; parse `git blame --line-porcelain` → `BlameLine[]`.
-- `evidence.ts` — aggregate blame+log into per-author `AuthorEvidence` (buckets by email).
-- `ai.ts` — providers (each owns multiple models), model build, streaming analysis,
-  JSON extraction + Zod retry. A selection is a `(providerId, model)` pair (`ModelSelection`).
-  Built-in providers are merged with the user config in a lazy, memoized `registry()`;
-  `ProviderId` is a plain `string` (config can introduce new providers).
-- `config.ts` — loads/validates `~/.config/git-therapy/config.json` (Zod) and resolves
-  `apiKey` values (`${VAR}` env refs or literal keys). AI-agnostic; `ai.ts` owns the merge.
-- `perspectives.ts` — the 5 lenses: each its own system prompt + Zod schema.
-- `useAnalysis.ts` — React hook for the analysis lifecycle (idle→loading→done/error).
-- `types.ts` — shared types. `panes/*.tsx` — one component per pane.
+- `types.ts` — shared types, including the locked `AuthorEvidence` contract.
+- `core/`
+  - `git.ts` / `blame.ts` — shell to git; parse `git blame --line-porcelain` → `BlameLine[]`.
+  - `evidence.ts` — aggregate blame+log into per-author `AuthorEvidence` (buckets by email).
+  - `args.ts` — parse the `<path>[:<start>-<end>]` invocation into a `Target`.
+- `ai/`
+  - `llm.ts` — providers (each owns multiple models), model build, streaming analysis,
+    JSON extraction + Zod retry. A selection is a `(providerId, model)` pair (`ModelSelection`).
+    Built-in providers are merged with the user config in a lazy, memoized `registry()`;
+    `ProviderId` is a plain `string` (config can introduce new providers).
+  - `config.ts` — loads/validates `~/.config/git-therapy/config.json` (Zod) and resolves
+    `apiKey` values (`${VAR}` env refs or literal keys). AI-agnostic; `llm.ts` owns the merge.
+  - `perspectives.ts` — the 5 lenses: each its own system prompt + Zod schema.
+- `ui/`
+  - `panes/*.tsx` — one component per pane (plus `theme.ts`, `useFocusRef.ts`).
+  - `useAnalysis.ts` / `useAnalysisRun.ts` — analysis lifecycle hooks (idle→loading→done/error).
+  - `useModelSelection.ts` — provider/model/language cycling state.
+  - `focus.ts` / `keys.ts` — pane focus order + keyboard helpers.
 
 ## Conventions & gotchas
 
@@ -42,7 +53,7 @@ the authors. See `README.md` for the user-facing pitch and the five lenses.
 - **Selection sets intent only.** Changing author/lens/model/language does *not* run the
   model — analysis fires only on Enter (`App.tsx` `startAnalysis`). Results are cached by
   `(author|lens|provider:model|language)` so revisiting a combo is instant.
-- **Providers own multiple models.** `BUILTIN_PROVIDERS` in `ai.ts` maps a provider
+- **Providers own multiple models.** `BUILTIN_PROVIDERS` in `llm.ts` maps a provider
   (endpoint + key) to a list of models; the TUI cycles provider with `m` and model with
   `M` (shift). The user config can extend or add providers (see `config.ts`); the merged
   set + cycle order come from `registry()`/`providerOrder()`, not a static const.
@@ -50,7 +61,7 @@ the authors. See `README.md` for the user-facing pitch and the five lenses.
   is `ollama` (local, no key) so the app runs out of the box — keep it first in
   `BUILTIN_ORDER` unless you deliberately want a key-required default.
 - **`AuthorEvidence` is a locked contract.** Its shape is fed unchanged to all 5 lenses;
-  changing it ripples into `ai.ts` and every schema in `perspectives.ts`. Touch with care.
+  changing it ripples into `llm.ts` and every schema in `perspectives.ts`. Touch with care.
 
 ## Commit messages
 

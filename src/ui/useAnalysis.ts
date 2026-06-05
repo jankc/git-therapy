@@ -6,13 +6,13 @@
 // it safe under React StrictMode double-invoke and rapid restarts.
 
 import { useEffect, useState } from "react";
-import { generateAnalysis, type Language, type ModelSelection } from "./ai";
-import type { Perspective } from "./perspectives";
+import { generateAnalysis, type Language, type ModelSelection } from "../ai/llm";
+import type { Perspective } from "../ai/perspectives";
 import type {
   AnalysisProgress,
   AnalysisState,
   AuthorEvidence,
-} from "./types";
+} from "../types";
 
 export interface AnalysisRequest {
   /** Bumped on every start so re-running the same config still fires. */

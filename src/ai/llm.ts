@@ -20,7 +20,7 @@ import type {
   AnalysisProgress,
   AuthorEvidence,
   TokenUsage,
-} from "./types";
+} from "../types";
 import type { Perspective } from "./perspectives";
 
 // Debug flag: when GIT_THERAPY_OUTGOING_LOG is set to a path, dump the exact

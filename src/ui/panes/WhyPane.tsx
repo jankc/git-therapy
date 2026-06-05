@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import type { Perspective } from "../perspectives";
-import type { Language } from "../ai";
+import type { Perspective } from "../../ai/perspectives";
+import type { Language } from "../../ai/llm";
 import { MarkdownView } from "./MarkdownView";
 import type {
   AnalysisActivity,
   AnalysisProgress,
   AnalysisState,
-} from "../types";
+} from "../../types";
 import { ACCENT, DIM, ERROR, FG, NEUTRAL } from "./theme";
 import { useFocusRef } from "./useFocusRef";
 

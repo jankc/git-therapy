@@ -11,7 +11,7 @@ import {
   type Language,
   type ModelSelection,
   type ProviderInfo,
-} from "./ai";
+} from "../ai/llm";
 
 export interface ModelSelectionControls {
   selection: ModelSelection;

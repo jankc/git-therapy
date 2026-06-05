@@ -2,7 +2,7 @@
 // (blame.ts, evidence.ts) is what carries the unit tests.
 
 import { dirname, resolve } from "node:path";
-import type { BlameLine, RawCommit } from "./types";
+import type { BlameLine, RawCommit } from "../types";
 import type { Target } from "./args";
 import { parsePorcelainBlame } from "./blame";
 

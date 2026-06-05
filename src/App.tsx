@@ -4,18 +4,18 @@
 
 import { useState } from "react";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
-import { INITIAL_FOCUSED_PANE_ID, getNextPaneId, type PaneId } from "./focus";
-import { getPerspective } from "./perspectives";
-import { modelLabel, type Language, type ModelSelection } from "./ai";
-import { useModelSelection } from "./useModelSelection";
-import { useAnalysisRun } from "./useAnalysisRun";
-import { isBareEscapeKey } from "./keys";
-import { WhatPane } from "./panes/WhatPane";
-import { WhoPane } from "./panes/WhoPane";
-import { PerspectivePane } from "./panes/PerspectivePane";
-import { WhyPane } from "./panes/WhyPane";
-import { ModelPane } from "./panes/ModelPane";
-import { LanguagePane } from "./panes/LanguagePane";
+import { INITIAL_FOCUSED_PANE_ID, getNextPaneId, type PaneId } from "./ui/focus";
+import { getPerspective } from "./ai/perspectives";
+import { modelLabel, type Language, type ModelSelection } from "./ai/llm";
+import { useModelSelection } from "./ui/useModelSelection";
+import { useAnalysisRun } from "./ui/useAnalysisRun";
+import { isBareEscapeKey } from "./ui/keys";
+import { WhatPane } from "./ui/panes/WhatPane";
+import { WhoPane } from "./ui/panes/WhoPane";
+import { PerspectivePane } from "./ui/panes/PerspectivePane";
+import { WhyPane } from "./ui/panes/WhyPane";
+import { ModelPane } from "./ui/panes/ModelPane";
+import { LanguagePane } from "./ui/panes/LanguagePane";
 import type {
   AuthorEvidence,
   BlameLine,

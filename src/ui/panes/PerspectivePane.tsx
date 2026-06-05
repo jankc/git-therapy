@@ -3,7 +3,7 @@
 // nothing runs until the user starts analysis. Selecting here only sets intent.
 
 import { type SelectOption } from "@opentui/core";
-import { PERSPECTIVES } from "../perspectives";
+import { PERSPECTIVES } from "../../ai/perspectives";
 import { SelectPane } from "./SelectPane";
 
 interface PerspectivePaneProps {

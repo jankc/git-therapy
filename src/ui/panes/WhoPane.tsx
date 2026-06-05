@@ -3,7 +3,7 @@
 // until the user starts an analysis.
 
 import { type SelectOption } from "@opentui/core";
-import type { AuthorEvidence } from "../types";
+import type { AuthorEvidence } from "../../types";
 import { SelectPane } from "./SelectPane";
 
 interface WhoPaneProps {

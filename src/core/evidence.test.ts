@@ -15,7 +15,7 @@ import {
   temporalRatios,
   wordFrequencies,
 } from "./evidence";
-import type { BlameLine, EvidenceCommit, RawCommit } from "./types";
+import type { BlameLine, EvidenceCommit, RawCommit } from "../types";
 
 // 10 days from Unix epoch — gives ageDays=10 for all authorTime=0 blame lines.
 const NOW_MS = 864_000_000;

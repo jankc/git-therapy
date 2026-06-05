@@ -4,7 +4,7 @@
 // stateless line-by-line parser works: a 40-hex line starts a record, header
 // fields accumulate, and the TAB-prefixed content line finalizes it.
 
-import type { BlameLine } from "./types";
+import type { BlameLine } from "../types";
 
 const HEADER_RE = /^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/;
 

@@ -1,12 +1,12 @@
 // The source pane: each scoped line prefixed with a git-blame gutter.
 
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import type { Perspective } from "../perspectives";
+import type { Perspective } from "../../ai/perspectives";
 import type {
   AuthorEvidence,
   BlameLine,
   EvidenceCollectionSummary,
-} from "../types";
+} from "../../types";
 import { ACCENT, GUTTER, NEUTRAL } from "./theme";
 import { useFocusRef } from "./useFocusRef";
 

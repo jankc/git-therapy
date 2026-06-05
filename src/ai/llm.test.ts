@@ -11,7 +11,7 @@ import {
   createInstrumentedFetch,
   resetRegistryForTests,
   upsertAnalysisActivity,
-} from "./ai";
+} from "./llm";
 
 beforeAll(() => {
   const dir = mkdtempSync(join(tmpdir(), "git-therapy-ai-"));
@@ -47,7 +47,7 @@ afterAll(() => {
 
 describe("provider registry (built-ins merged with config)", () => {
   test("explicit order leads, with unlisted providers appended", async () => {
-    const { providerOrder } = await import("./ai");
+    const { providerOrder } = await import("./llm");
     expect(providerOrder().slice(0, 2)).toEqual(["openrouter", "ollama"]);
     // the custom provider and other built-ins still appear after the explicit order
     expect(providerOrder()).toContain("custom");
@@ -55,27 +55,27 @@ describe("provider registry (built-ins merged with config)", () => {
   });
 
   test("config extends a built-in's model list", async () => {
-    const { listProviders } = await import("./ai");
+    const { listProviders } = await import("./llm");
     const ollama = listProviders().find((p) => p.id === "ollama")!;
     expect(ollama.models).toEqual(["m-one", "m-two"]);
     expect(ollama.hasKey).toBe(true); // ollama is keyless
   });
 
   test("default selection honors config.default", async () => {
-    const { defaultSelection, defaultLanguage } = await import("./ai");
+    const { defaultSelection, defaultLanguage } = await import("./llm");
     expect(defaultSelection()).toEqual({ providerId: "openrouter", model: "qwen/qwen3.6-flash" });
     expect(defaultLanguage()).toBe("Czech");
   });
 
   test("a ${VAR} key shows as missing when the env var is unset", async () => {
-    const { listProviders } = await import("./ai");
+    const { listProviders } = await import("./llm");
     const custom = listProviders().find((p) => p.id === "custom")!;
     expect(custom.models).toEqual(["x"]);
     expect(custom.hasKey).toBe(false);
   });
 
   test("startupSelection applies --provider/--model and validates them", async () => {
-    const { startupSelection } = await import("./ai");
+    const { startupSelection } = await import("./llm");
     expect(startupSelection({ provider: "ollama", model: "m-two" })).toEqual({
       providerId: "ollama",
       model: "m-two",
@@ -85,14 +85,14 @@ describe("provider registry (built-ins merged with config)", () => {
   });
 
   test("cycleProvider follows the configured order", async () => {
-    const { cycleProvider } = await import("./ai");
+    const { cycleProvider } = await import("./llm");
     const next = cycleProvider({ providerId: "openrouter", model: "qwen/qwen3.6-flash" });
     expect(next.providerId).toBe("ollama");
     expect(next.model).toBe("m-one"); // lands on the new provider's first model
   });
 
   test("parseLanguage is case-insensitive and rejects unknowns", async () => {
-    const { parseLanguage } = await import("./ai");
+    const { parseLanguage } = await import("./llm");
     expect(parseLanguage("czech")).toBe("Czech");
     expect(() => parseLanguage("Klingon")).toThrow();
   });

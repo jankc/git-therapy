@@ -3,7 +3,7 @@
 // availability.
 
 import { TextAttributes } from "@opentui/core";
-import type { ModelSelection } from "../ai";
+import type { ModelSelection } from "../../ai/llm";
 import { ACCENT, DIM, KEY_MISSING, KEY_OK, NEUTRAL } from "./theme";
 
 interface ModelPaneProps {

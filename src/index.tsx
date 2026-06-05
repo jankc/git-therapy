@@ -4,7 +4,7 @@
 
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { parseInvocation, type Target } from "./args";
+import { parseInvocation, type Target } from "./core/args";
 import {
   defaultLanguage,
   defaultSelection,
@@ -16,10 +16,10 @@ import {
   LANGUAGES,
   type Language,
   type ModelSelection,
-} from "./ai";
-import { configExists, configPath, initConfig } from "./config";
-import { collect } from "./git";
-import { buildAuthorEvidence } from "./evidence";
+} from "./ai/llm";
+import { configExists, configPath, initConfig } from "./ai/config";
+import { collect } from "./core/git";
+import { buildAuthorEvidence } from "./core/evidence";
 import { App } from "./App";
 import type { EvidenceCollectionSummary } from "./types";
 import pkg from "../package.json";
