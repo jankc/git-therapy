@@ -20,7 +20,7 @@ beforeAll(() => {
     path,
     JSON.stringify({
       default: { provider: "openrouter", model: "qwen/qwen3.6-flash" },
-      language: "Czech",
+      languages: ["Czech", "English"],
       order: ["openrouter", "ollama"],
       providers: {
         // extend a built-in: append a model to ollama's cycle list
@@ -65,6 +65,12 @@ describe("provider registry (built-ins merged with config)", () => {
     const { defaultSelection, defaultLanguage } = await import("./llm");
     expect(defaultSelection()).toEqual({ providerId: "openrouter", model: "qwen/qwen3.6-flash" });
     expect(defaultLanguage()).toBe("Czech");
+  });
+
+  test("languages come from config, first is the default", async () => {
+    const { listLanguages, defaultLanguage } = await import("./llm");
+    expect(listLanguages()).toEqual(["Czech", "English"]);
+    expect(defaultLanguage()).toBe(listLanguages()[0]!);
   });
 
   test("a ${VAR} key shows as missing when the env var is unset", async () => {

@@ -63,7 +63,8 @@ git-therapy src/app.ts:40-80               # analyze a 1-based line range
 git-therapy src/app.ts -p zai --lang Czech # start on a provider / language
 ```
 
-Options: `-p, --provider <id>`, `--model <name>`, `--lang <English|Czech>`,
+Options: `-p, --provider <id>`, `--model <name>`, `--lang <name>` (one of the
+configured languages),
 `-h, --help`, `-v, --version`. Subcommands: `git-therapy providers` lists the
 available providers and models, `git-therapy config [init]` shows (or scaffolds)
 the config file.
@@ -81,7 +82,7 @@ and therefore no diagnosis, for code that was never committed. (Make of that wha
 | `↑ / ↓` | move the selection              |
 | `Enter` | run the examination             |
 | `m / M` | cycle provider / model          |
-| `l`     | toggle language (English / Czech) |
+| `l`     | cycle output language (from config) |
 | `v`     | toggle code / evidence summary  |
 | `Esc`   | cancel a running analysis       |
 | `q`     | quit                            |
@@ -113,7 +114,9 @@ path with `GIT_THERAPY_CONFIG`). Scaffold one with `git-therapy config init`:
 ```jsonc
 {
   "default": { "provider": "ollama", "model": "qwen3.6:27b-mlx" },
-  "language": "English",
+  // output languages offered in the TUI (cycled with `l`); the first is the
+  // default. Omit for English only.
+  "languages": ["English", "Czech"],
   "providers": {
     // extend a built-in: add models to its cycle list
     "ollama": { "models": ["qwen3.6:27b-mlx", "gemma4:26b-mlx"] },

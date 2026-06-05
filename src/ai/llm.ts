@@ -107,14 +107,24 @@ interface ProviderConfig {
 }
 
 // Output language for the analysis ('l' key). The model writes the full Markdown
-// report in this language while preserving the requested structure.
-export const LANGUAGES = ["English", "Czech"] as const;
-export type Language = (typeof LANGUAGES)[number];
+// report in this language while preserving the requested structure. The offered
+// set comes from the registry (config `languages`, else English); a Language is
+// just one of those names, so the type is a plain string like ProviderId.
+export type Language = string;
 
-/** Resolve a free-text language name (case-insensitive) to a known Language. */
+// Fallback when config supplies no `languages`: English only.
+const BUILTIN_LANGUAGES = ["English"] as const;
+
+/** The languages offered in the TUI, in cycle order (first is the default). */
+export function listLanguages(): Language[] {
+  return registry().languages;
+}
+
+/** Resolve a free-text language name (case-insensitive) to an offered Language. */
 export function parseLanguage(input: string): Language {
-  const match = LANGUAGES.find((l) => l.toLowerCase() === input.trim().toLowerCase());
-  if (!match) throw new Error(`unknown language "${input}" — choose: ${LANGUAGES.join(", ")}`);
+  const languages = registry().languages;
+  const match = languages.find((l) => l.toLowerCase() === input.trim().toLowerCase());
+  if (!match) throw new Error(`unknown language "${input}" — choose: ${languages.join(", ")}`);
   return match;
 }
 
@@ -145,7 +155,7 @@ interface Registry {
   order: ProviderId[];
   defaultProvider: ProviderId;
   defaultModel: string | null;
-  defaultLanguage: Language;
+  languages: Language[];
 }
 
 function resolveBuiltin(b: BuiltinProvider): ProviderConfig {
@@ -236,8 +246,14 @@ function buildRegistry(): Registry {
     );
   }
 
-  const defaultLanguage = user.language ? parseLanguage(user.language) : "English";
-  return { providers, order, defaultProvider, defaultModel, defaultLanguage };
+  // Languages: config's list (first = default), else English only. Trim and drop
+  // blanks/dupes so the cycle order is clean.
+  const seen = new Set<string>();
+  const languages = (user.languages ?? BUILTIN_LANGUAGES)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !seen.has(l.toLowerCase()) && seen.add(l.toLowerCase()));
+  if (languages.length === 0) languages.push(BUILTIN_LANGUAGES[0]);
+  return { providers, order, defaultProvider, defaultModel, languages };
 }
 
 // Built lazily and memoized: a CLI subcommand like `--help` must not pay for (or
@@ -386,9 +402,9 @@ export function defaultSelection(): ModelSelection {
   return { providerId: defaultProvider, model: defaultModel ?? configFor(defaultProvider).models[0]! };
 }
 
-/** The language to start in (config.language, else English). */
+/** The language to start in: the first offered language (config's, else English). */
 export function defaultLanguage(): Language {
-  return registry().defaultLanguage;
+  return registry().languages[0]!;
 }
 
 /**

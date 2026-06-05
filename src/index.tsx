@@ -13,7 +13,7 @@ import {
   providerOrder,
   startupSelection,
   parseLanguage,
-  LANGUAGES,
+  listLanguages,
   type Language,
   type ModelSelection,
 } from "./ai/llm";
@@ -38,6 +38,12 @@ function helpText(): string {
   } catch {
     providers = "ollama, openrouter, zai, gemini";
   }
+  let languages: string;
+  try {
+    languages = listLanguages().join(" / ");
+  } catch {
+    languages = "English";
+  }
   return `git-therapy — psychoanalyze a file's authors from its git history
 
 Usage:
@@ -52,7 +58,7 @@ Arguments:
 Options:
   -p, --provider <id>   start on this provider
       --model <name>    start on this model (must be one of the provider's models)
-      --lang <name>     output language (${LANGUAGES.join(" / ")})
+      --lang <name>     output language (${languages})
   -h, --help            show this help and exit
   -v, --version         show version and exit
 
@@ -68,7 +74,7 @@ Config:
 
 Keys (inside the TUI):
   Tab    move between panes        m / M  cycle provider / model
-  ↑ / ↓  move the selection        l      toggle language (English / Czech)
+  ↑ / ↓  move the selection        l      cycle output language (${languages})
   v      toggle code / evidence
   Enter  run the examination       Esc    cancel a running analysis
   q      quit

@@ -33,7 +33,9 @@ export const UserConfigSchema = z
       .object({ provider: z.string().min(1), model: z.string().min(1).optional() })
       .strict()
       .optional(),
-    language: z.string().min(1).optional(),
+    // Output languages offered in the TUI (cycled with `l`). The first is the
+    // default. Omitted → English only.
+    languages: z.array(z.string().min(1)).min(1).optional(),
     // Explicit cycle order for the `m` key; unlisted providers are appended.
     order: z.array(z.string().min(1)).optional(),
     providers: z.record(z.string(), ProviderConfigSchema).optional(),
@@ -128,7 +130,7 @@ export function resolveSecret(value: string): ResolvedSecret {
 // so it round-trips through the loader; the README documents the fields.
 const STARTER_CONFIG = {
   default: { provider: "ollama" },
-  language: "English",
+  languages: ["English", "Czech"],
   providers: {
     ollama: { models: ["qwen3.5:9b", "qwen3.5:4b"] },
     "my-endpoint": {

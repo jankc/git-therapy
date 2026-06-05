@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import {
   cycleModel,
   cycleProvider,
-  LANGUAGES,
+  listLanguages,
   listProviders,
   type Language,
   type ModelSelection,
@@ -30,8 +30,9 @@ export function useModelSelection(
   const [selection, setSelection] = useState<ModelSelection>(initialSelection);
   const [language, setLanguage] = useState<Language>(initialLanguage);
 
-  // Key availability is fixed for the process; compute the provider list once.
+  // Key availability and the language set are fixed for the process; compute once.
   const providers = useRef(listProviders()).current;
+  const languages = useRef(listLanguages()).current;
   const activeProvider = providers.find((p) => p.id === selection.providerId) ?? providers[0]!;
 
   const cycleSelection = (withinProvider: boolean) => {
@@ -40,8 +41,8 @@ export function useModelSelection(
 
   const cycleLanguage = () => {
     setLanguage((current) => {
-      const i = LANGUAGES.indexOf(current);
-      return LANGUAGES[(i + 1) % LANGUAGES.length]!;
+      const i = languages.indexOf(current);
+      return languages[(i + 1) % languages.length]!;
     });
   };
 
