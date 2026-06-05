@@ -160,6 +160,13 @@ function Spinner({
       <text fg={DIM}>
         {analysis.lens} · {analysis.model} · {analysis.language}
       </text>
+      {(progress.approxOutputTokens > 0 ||
+        progress.approxReasoningTokens > 0) && (
+        <text fg={DIM}>
+          ~{fmtTokens(progress.approxOutputTokens)} out · ~
+          {fmtTokens(progress.approxReasoningTokens)} reasoning
+        </text>
+      )}
       <ActivityLog activities={progress.activities} now={Date.now()} />
     </box>
   );
@@ -280,7 +287,6 @@ export function WhyPane({
   let body: React.ReactNode;
   let footer = "";
   if (state.status === "loading" && activeAnalysis) {
-    const tokens = state.progress.approxOutputTokens;
     body = (
       <box flexDirection="column">
         <Spinner
@@ -291,7 +297,9 @@ export function WhyPane({
         <AnalysisMarkdown content={state.progress.markdown} />
       </box>
     );
-    footer = `${activeAnalysis.lens} · Esc cancel · ~${fmtTokens(tokens)} out · ~${fmtTokens(state.progress.approxReasoningTokens)} reasoning`;
+    // Token progress lives in the body (see Spinner); keep the footer short
+    // enough that it doesn't overflow the pane border and get dropped.
+    footer = `${activeAnalysis.lens} · Esc cancel`;
   } else if (!suspect) {
     body = (
       <text attributes={TextAttributes.DIM}>
