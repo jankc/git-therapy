@@ -181,6 +181,15 @@ describe("perspective registry", () => {
     }
   });
 
+  test("every metric carries a confidence line below its title", () => {
+    for (const p of PERSPECTIVES.filter((perspective) => perspective.id !== "hidden")) {
+      expect(p.system).toContain("Directly below each metric heading, on its own line, write");
+      expect(p.system).toContain("Confidence: <integer>%");
+      // The confidence sits between the heading and the interpretation placeholder.
+      expect(p.system).toMatch(/## .+\nConfidence: <integer>%\n\n<One concise/);
+    }
+  });
+
   test("hidden prompt omits metric-scale text but retains citation requirement", () => {
     const hidden = PERSPECTIVES.find((p) => p.id === "hidden")!;
 

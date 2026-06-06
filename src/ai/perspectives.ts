@@ -35,6 +35,7 @@ function metricsInstruction(title: string, metrics: ReportMetric[]): string {
     .map(
       ({ name, valueFormat, meaning }) =>
         `## ${name} — **${valueFormat}**\n` +
+        `Confidence: <integer>%\n\n` +
         `<One concise evidence-grounded interpretation of ${meaning}, citing concrete supplied facts.>`,
     )
     .join("\n\n");
@@ -48,7 +49,12 @@ function metricsInstruction(title: string, metrics: ReportMetric[]): string {
     `For probabilities, use an integer from 0% to 100%: 0% means effectively ruled out, 50% means indeterminate, and ` +
     `100% means near-certain. Sparse or ambiguous evidence should pull a probability toward 50%, not toward 0%; values ` +
     `above 75% or below 25% require at least two distinct cited data points. Percentage densities describe an estimated ` +
-    `share of the supplied code, not confidence. Ratios must use two non-negative integers that sum to 100. Natural-unit ` +
+    `share of the supplied code, not confidence. Directly below each metric heading, on its own line, write ` +
+    `"Confidence: <integer>%" — an integer from 0% to 100% stating how strongly the supplied evidence supports that ` +
+    `metric's stated value. This is your self-assessment of evidential support, NOT a restatement of the value: a ` +
+    `probability metric and its confidence are independent (you can be highly confident that some event is 50% likely). ` +
+    `Sparse, ambiguous, or conflicting evidence lowers confidence; multiple corroborating cited data points raise it. ` +
+    `Then leave a blank line before the interpretation paragraph. Ratios must use two non-negative integers that sum to 100. Natural-unit ` +
     `estimates must remain plausible and conservative. Qualitative values must be short, specific labels; use "unclear" ` +
     `when the evidence cannot support a direction. If evidence contradicts a metric's premise, explain the contradiction ` +
     `instead of inventing support. End with an optional "## Notes" section containing at most 5 short bullets.\n\n` +
