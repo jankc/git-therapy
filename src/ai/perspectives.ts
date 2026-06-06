@@ -1,7 +1,7 @@
 // The perspective registry: one git evidence input, several prompts, several readings.
 // Every lens emits Markdown so the analysis can render while it is still streaming.
 
-import type { AuthorEvidence, RepoBaseline } from "../types";
+import type { AuthorEvidence, BlamedLineEvidence, RepoBaseline } from "../types";
 
 export interface Perspective {
   id: string;
@@ -58,11 +58,37 @@ function metricsInstruction(title: string, metrics: ReportMetric[]): string {
   );
 }
 
+// Blamed lines dominate the prompt — at ~1800 entries, repeating the seven JSON
+// object keys on every line is the single biggest contributor to prompt size
+// (and the thing that pushes a large file past a local model's context window).
+// Emit them losslessly as positional rows under one column legend instead: same
+// fields, in the same order, with no per-row key overhead.
+const BLAMED_LINE_COLUMNS = [
+  "lineNumber",
+  "sha",
+  "authorTime",
+  "authorTz",
+  "ageDays",
+  "summary",
+  "code",
+] as const;
+
+function compactBlamedLines(lines: BlamedLineEvidence[]): string {
+  const rows = lines
+    .map((l) =>
+      // JSON-encode each row so quoting keeps `summary`/`code` safe (tabs, quotes,
+      // commas), while dropping the repeated keys an array-of-objects would carry.
+      JSON.stringify([l.lineNumber, l.sha, l.authorTime, l.authorTz, l.ageDays, l.summary, l.code]),
+    )
+    .join("\n");
+  return `(positional rows, columns: [${BLAMED_LINE_COLUMNS.join(", ")}])\n${rows}`;
+}
+
 function coreEvidence(e: AuthorEvidence): string {
   return (
     `AUTHOR: ${e.author.name} <${e.author.email}>\n` +
     `LINES AUTHORED: ${e.linesAuthored} (ranges ${JSON.stringify(e.lineRanges)})\n` +
-    `PRIMARY EVIDENCE — BLAMED LINES: ${JSON.stringify(e.blamedLines)}\n` +
+    `PRIMARY EVIDENCE — BLAMED LINES ${compactBlamedLines(e.blamedLines)}\n` +
     `PRIMARY EVIDENCE — BLAMED COMMITS: ${JSON.stringify(e.blamedCommits)}\n` +
     `BACKGROUND ONLY — AUTHOR BASELINE: ${JSON.stringify(e.authorBaseline)}\n` +
     `SURROUNDING SOURCE CONTEXT — SCOPE CODE:\n${e.scopeCode}`
